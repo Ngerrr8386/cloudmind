@@ -1,9 +1,10 @@
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { AuthProvider, RequireAuth } from '@/lib/auth'
 import { AppShell } from '@/components/layout/AppShell'
 import { LandingPage } from '@/pages/marketing/LandingPage'
 import { PricingPage } from '@/pages/marketing/PricingPage'
+import { PaymentResultPage } from '@/pages/marketing/PaymentResultPage'
 import { AuthPage } from '@/pages/marketing/AuthPage'
 import { DashboardPage } from '@/pages/app/DashboardPage'
 import { FilesPage } from '@/pages/app/FilesPage'
@@ -31,6 +32,10 @@ export default function App() {
           <Route path="/login" element={<AuthPage mode="login" />} />
           <Route path="/signup" element={<AuthPage mode="signup" />} />
 
+          {/* Kết quả thanh toán PayOS (returnUrl/cancelUrl) */}
+          <Route path="/billing/success" element={<PaymentResultPage status="success" />} />
+          <Route path="/billing/cancel" element={<PaymentResultPage status="cancel" />} />
+
           {/* App (yêu cầu đăng nhập) */}
           <Route path="/app" element={<RequireAuth><AppShell /></RequireAuth>}>
             <Route index element={<DashboardPage />} />
@@ -41,6 +46,9 @@ export default function App() {
             <Route path="insights" element={<InsightsPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
+
+          {/* Đường dẫn lạ → về trang chủ (tránh màn hình trắng) */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

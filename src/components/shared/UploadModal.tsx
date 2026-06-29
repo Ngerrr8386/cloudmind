@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { UploadCloud, FileText, Sparkles, Check, FolderInput, Wand2 } from 'lucide-react'
+import { UploadCloud, FileText, Sparkles, Check, FolderInput, Wand2, AlertTriangle } from 'lucide-react'
 import { Modal, Button, FolderGlyph, ConfidenceMeter } from '@/components/ui'
 import { tone as toneClasses } from '@/lib/theme'
 import { cn, formatBytes } from '@/lib/utils'
@@ -8,7 +8,7 @@ import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useApi'
 import type { Folder, FolderSuggestion } from '@/lib/types'
 
-type Stage = 'drop' | 'analyzing' | 'suggest' | 'uploading' | 'done'
+type Stage = 'drop' | 'analyzing' | 'suggest' | 'uploading' | 'done' | 'error'
 
 const analyzingSteps = [
   'Đọc nội dung tài liệu...',
@@ -23,6 +23,7 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
   const [picked, setPicked] = useState<string>('')
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [uploaded, setUploaded] = useState(0)
+  const [failed, setFailed] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Thư mục thật từ backend.
@@ -55,6 +56,7 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
         setStep(0)
         setPendingFiles([])
         setUploaded(0)
+        setFailed(0)
         setPicked(folderSuggestions[0]?.folderId ?? '')
       }, 300)
       return () => clearTimeout(t)
@@ -87,13 +89,23 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
   const confirmUpload = async () => {
     setStage('uploading')
     setUploaded(0)
+    setFailed(0)
+    let failedCount = 0
+    let okCount = 0
     for (const file of pendingFiles) {
       try {
         await api.uploadFile(file, picked || undefined)
+        okCount += 1
       } catch {
-        /* bỏ qua file lỗi, vẫn tiếp tục */
+        failedCount += 1
       }
       setUploaded((n) => n + 1)
+    }
+    setFailed(failedCount)
+    if (okCount === 0) {
+      // Tất cả đều lỗi → KHÔNG báo thành công.
+      setStage('error')
+      return
     }
     setStage('done')
     onUploaded?.()
@@ -274,9 +286,29 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
             </motion.div>
             <h3 className="text-xl font-bold text-slate-900">Đã lưu thành công! 🎉</h3>
             <p className="mt-1 text-sm text-slate-500">
-              File đã vào <span className="font-semibold text-slate-800">{folders.find((f) => f.id === picked)?.name ?? 'kho lưu trữ'}</span> và được AI lập chỉ mục
+              File đã vào <span className="font-semibold text-slate-800">{folders.find((f) => f.id === picked)?.name ?? 'kho lưu trữ'}</span> — AI đang lập chỉ mục (có thể mất vài giây)
             </p>
+            {failed > 0 && (
+              <p className="mt-2 text-xs font-semibold text-amber-600">{failed} file tải lên thất bại và đã bị bỏ qua.</p>
+            )}
             <Button className="mt-6 w-full" onClick={onClose}>Tuyệt vời</Button>
+          </motion.div>
+        )}
+
+        {/* ERROR */}
+        {stage === 'error' && (
+          <motion.div key="error" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="py-8 text-center">
+            <div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full bg-rose-100">
+              <AlertTriangle className="h-10 w-10 text-rose-600" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-900">Tải lên thất bại</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              Không tải được {pendingFiles.length > 1 ? `${pendingFiles.length} file` : 'file'} lên máy chủ. Kiểm tra kết nối rồi thử lại nhé.
+            </p>
+            <div className="mt-6 flex gap-2">
+              <Button variant="glass" className="flex-1" onClick={onClose}>Đóng</Button>
+              <Button className="flex-1" onClick={confirmUpload}>Thử lại</Button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

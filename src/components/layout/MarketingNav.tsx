@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
 import { Logo, Button } from '@/components/ui'
+import { useAuth } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 
 const links = [
@@ -16,6 +17,7 @@ export function MarketingNav() {
   const [scrolled, setScrolled] = useState(false)
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -53,8 +55,14 @@ export function MarketingNav() {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>Đăng nhập</Button>
-          <Button size="sm" onClick={() => navigate('/app')}>Dùng thử miễn phí</Button>
+          {user ? (
+            <Button size="sm" onClick={() => navigate('/app')}>Vào ứng dụng</Button>
+          ) : (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>Đăng nhập</Button>
+              <Button size="sm" onClick={() => navigate('/signup')}>Dùng thử miễn phí</Button>
+            </>
+          )}
         </div>
 
         <button onClick={() => setOpen((v) => !v)} className="grid h-10 w-10 place-items-center rounded-xl text-slate-700 md:hidden">
@@ -76,8 +84,14 @@ export function MarketingNav() {
               </a>
             ))}
             <div className="mt-2 flex gap-2 px-1">
-              <Button variant="glass" size="sm" className="flex-1" onClick={() => navigate('/login')}>Đăng nhập</Button>
-              <Button size="sm" className="flex-1" onClick={() => navigate('/app')}>Dùng thử</Button>
+              {user ? (
+                <Button size="sm" className="flex-1" onClick={() => { setOpen(false); navigate('/app') }}>Vào ứng dụng</Button>
+              ) : (
+                <>
+                  <Button variant="glass" size="sm" className="flex-1" onClick={() => { setOpen(false); navigate('/login') }}>Đăng nhập</Button>
+                  <Button size="sm" className="flex-1" onClick={() => { setOpen(false); navigate('/signup') }}>Dùng thử</Button>
+                </>
+              )}
             </div>
           </motion.div>
         )}

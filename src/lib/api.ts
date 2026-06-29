@@ -160,15 +160,13 @@ export const api = {
   bulkFiles: (b: { ids: string[]; action: string; folderId?: string | null }) => post('/files/bulk', b),
 
   /** Upload qua Firebase signed URL: tạo URL → PUT → confirm. */
-  uploadFile: async (file: File, folderId?: string | null) => {
-    const { file: rec, uploadUrl } = await post('/files/upload-url', {
-      fileName: file.name,
-      contentType: file.type || 'application/octet-stream',
-      size: file.size,
-      folderId: folderId ?? undefined,
-    })
-    await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream' }, body: file })
-    return post(`/files/${rec.id}/confirm`, { size: file.size })
+  uploadFile: (file: File, folderId?: string | null) => {
+    // Upload qua backend (multipart) — browser → backend → Firebase (server-side),
+    // tránh phụ thuộc cấu hình CORS của Firebase Storage cho signed-URL.
+    const form = new FormData()
+    form.append('file', file)
+    if (folderId) form.append('folderId', folderId)
+    return post('/files/direct-upload', form)
   },
 
   // ---------- AI ----------
