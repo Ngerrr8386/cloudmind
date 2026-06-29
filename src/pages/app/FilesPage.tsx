@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Upload,
@@ -96,6 +96,17 @@ export function FilesPage() {
     [user?.name, dataNonce],
   )
   const files = useMemo<StoredFile[]>(() => filesData ?? [], [filesData])
+
+  // Tự refresh khi còn file đang lập chỉ mục (pending/processing) để cập nhật badge.
+  const anyEmbedding = useMemo(
+    () => files.some((f) => f.embedStatus === 'pending' || f.embedStatus === 'processing'),
+    [files],
+  )
+  useEffect(() => {
+    if (!anyEmbedding) return
+    const t = window.setInterval(() => reloadFiles(), 3000)
+    return () => window.clearInterval(t)
+  }, [anyEmbedding, reloadFiles])
 
   const loading = foldersLoading || filesLoading
 

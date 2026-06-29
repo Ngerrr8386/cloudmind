@@ -1,11 +1,42 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Star, MoreHorizontal, Users, Sparkles, Download, Share2, Trash2 } from 'lucide-react'
+import { Star, MoreHorizontal, Users, Sparkles, Download, Share2, Trash2, Loader2, AlertTriangle } from 'lucide-react'
 import { GlassCard, FileTypeIcon, fileTint, fileTypeLabel, Badge } from '@/components/ui'
 import type { StoredFile } from '@/lib/types'
 import { formatBytes, timeAgo, cn } from '@/lib/utils'
 import { tone as toneClasses } from '@/lib/theme'
 import { fadeUp } from '@/lib/motion'
+
+/** Trạng thái lập chỉ mục AI (embedding). Fallback aiProcessed cho file cũ. */
+function EmbedBadge({ file, compact = false }: { file: StoredFile; compact?: boolean }) {
+  const s = file.embedStatus ?? (file.aiProcessed ? 'done' : undefined)
+
+  if (s === 'pending' || s === 'processing') {
+    if (compact) return <Loader2 className="h-3 w-3 shrink-0 animate-spin text-amber-500" aria-label="AI đang xử lý" />
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50/90 px-2 py-0.5 text-[10px] font-bold text-amber-600 backdrop-blur-sm">
+        <Loader2 className="h-2.5 w-2.5 animate-spin" /> AI đang xử lý
+      </span>
+    )
+  }
+  if (s === 'failed') {
+    if (compact) return <AlertTriangle className="h-3 w-3 shrink-0 text-rose-500" aria-label="Lỗi lập chỉ mục" />
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50/90 px-2 py-0.5 text-[10px] font-bold text-rose-600 backdrop-blur-sm">
+        <AlertTriangle className="h-2.5 w-2.5" /> Lỗi index
+      </span>
+    )
+  }
+  if (s === 'done') {
+    if (compact) return <Sparkles className="h-3 w-3 shrink-0 text-ink-400" aria-label="Đã lập chỉ mục" />
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-bold text-ink-600 backdrop-blur-sm">
+        <Sparkles className="h-2.5 w-2.5" /> AI
+      </span>
+    )
+  }
+  return null
+}
 
 export interface FileActions {
   onStar?: () => void
@@ -82,13 +113,9 @@ export function FileCard({ file, onClick, ...actions }: { file: StoredFile; onCl
             {file.starred && <span className="grid h-6 w-6 place-items-center rounded-lg bg-white/80 backdrop-blur-sm"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" /></span>}
             {file.shared && <span className="grid h-6 w-6 place-items-center rounded-lg bg-white/80 backdrop-blur-sm"><Users className="h-3.5 w-3.5 text-slate-600" /></span>}
           </div>
-          {file.aiProcessed && (
-            <div className="absolute bottom-2 right-3">
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-bold text-ink-600 backdrop-blur-sm">
-                <Sparkles className="h-2.5 w-2.5" /> AI
-              </span>
-            </div>
-          )}
+          <div className="absolute bottom-2 right-3">
+            <EmbedBadge file={file} />
+          </div>
         </div>
         {/* Meta */}
         <div className="p-4">
@@ -126,7 +153,7 @@ export function FileRow({ file, onClick, ...actions }: { file: StoredFile; onCli
         <div className="flex items-center gap-2">
           <p className="truncate text-sm font-semibold text-slate-800">{file.name}</p>
           {file.starred && <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />}
-          {file.aiProcessed && <Sparkles className="h-3 w-3 shrink-0 text-ink-400" />}
+          <EmbedBadge file={file} compact />
         </div>
         <p className="truncate text-xs text-slate-400">{file.aiSummary ?? fileTypeLabel[file.type]}</p>
       </div>

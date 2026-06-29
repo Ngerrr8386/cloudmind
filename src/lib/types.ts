@@ -25,6 +25,8 @@ export interface StoredFile {
   starred: boolean
   shared: boolean
   aiProcessed: boolean
+  /** trạng thái lập chỉ mục AI (embedding) */
+  embedStatus?: 'pending' | 'processing' | 'done' | 'failed'
   aiSummary?: string
   tags: string[]
   /** flat tint tone used for thumbnails */
