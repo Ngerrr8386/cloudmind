@@ -33,6 +33,7 @@ import type { Insight, FileType } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { tone, type Tone } from '@/lib/theme'
 import { staggerContainer, fadeUp, fadeUpLg, scaleIn, popIn, spring } from '@/lib/motion'
+import { useT, type TranslationKey } from '@/lib/i18n'
 
 /* ------------------------------------------------------------------ */
 /* Local helpers & invented data                                       */
@@ -61,11 +62,11 @@ const topicTrends: TopicTrendPoint[] = [
   { month: 'T6', ai: 47, design: 14, finance: 11 },
 ]
 
-type TopicMeta = { key: keyof Omit<TopicTrendPoint, 'month'>; label: string; color: string }
+type TopicMeta = { key: keyof Omit<TopicTrendPoint, 'month'>; labelKey: TranslationKey; color: string }
 const topicMeta: TopicMeta[] = [
-  { key: 'ai', label: 'AI & Cloud', color: '#7c3aed' },
-  { key: 'design', label: 'Thiết kế', color: '#e11d48' },
-  { key: 'finance', label: 'Tài chính', color: '#059669' },
+  { key: 'ai', labelKey: 'ins.topicAi', color: '#7c3aed' },
+  { key: 'design', labelKey: 'ins.topicDesign', color: '#e11d48' },
+  { key: 'finance', labelKey: 'ins.topicFinance', color: '#059669' },
 ]
 
 /** Một file liên quan trong kết nối (từ backend: { id, name }). */
@@ -94,46 +95,19 @@ const connectionTones: Tone[] = ['indigo', 'emerald', 'rose', 'blue']
 
 type Recommendation = {
   id: string
-  kind: string
+  kindKey: TranslationKey
   icon: LucideIcon
-  title: string
-  description: string
-  cta: string
+  titleKey: TranslationKey
+  descKey: TranslationKey
+  ctaKey: TranslationKey
   tone: Tone
   badgeTone: 'brand' | 'mint' | 'candy' | 'sun'
 }
 
 const recommendations: Recommendation[] = [
-  {
-    id: 'rc1',
-    kind: 'Nên đọc lại',
-    icon: BookOpen,
-    title: 'Atomic Habits đang phủ bụi 📚',
-    description: 'Bạn đánh dấu sao nhưng chưa mở lại 3 tháng. AI gợi ý lướt lại 5 ý chính trong 4 phút.',
-    cta: 'Tóm tắt nhanh',
-    tone: 'violet',
-    badgeTone: 'brand',
-  },
-  {
-    id: 'rc2',
-    kind: 'Có thể gộp',
-    icon: Merge,
-    title: '14 file trùng + 6 bản nháp',
-    description: 'Các slide "v3 final FINAL" và bản nháp cũ có thể gộp lại, giải phóng ~2.4 GB.',
-    cta: 'Xem & gộp',
-    tone: 'emerald',
-    badgeTone: 'mint',
-  },
-  {
-    id: 'rc3',
-    kind: 'Chủ đề đang lên',
-    icon: Flame,
-    title: 'AI & Cloud bùng nổ +47%',
-    description: 'Chủ đề này chiếm 42% tài liệu mới tháng này. Tạo một cụm tri thức riêng để gom hết lại nhé?',
-    cta: 'Tạo cụm tri thức',
-    tone: 'amber',
-    badgeTone: 'sun',
-  },
+  { id: 'rc1', kindKey: 'ins.rc1Kind', icon: BookOpen, titleKey: 'ins.rc1Title', descKey: 'ins.rc1Desc', ctaKey: 'ins.rc1Cta', tone: 'violet', badgeTone: 'brand' },
+  { id: 'rc2', kindKey: 'ins.rc2Kind', icon: Merge, titleKey: 'ins.rc2Title', descKey: 'ins.rc2Desc', ctaKey: 'ins.rc2Cta', tone: 'emerald', badgeTone: 'mint' },
+  { id: 'rc3', kindKey: 'ins.rc3Kind', icon: Flame, titleKey: 'ins.rc3Title', descKey: 'ins.rc3Desc', ctaKey: 'ins.rc3Cta', tone: 'amber', badgeTone: 'sun' },
 ]
 
 /* ------------------------------------------------------------------ */
@@ -185,6 +159,7 @@ function InsightCard({ insight }: { insight: Insight }) {
 }
 
 function ConnectionCard({ connection }: { connection: Connection }) {
+  const t = useT()
   const relatedFiles = connection.files
   return (
     <GlassCard variants={fadeUp} interactive className="flex h-full flex-col gap-4 p-5">
@@ -198,7 +173,7 @@ function ConnectionCard({ connection }: { connection: Connection }) {
           <Link2 className="h-4 w-4" />
         </span>
         <Badge tone="ai" dot>
-          AI đã phát hiện
+          {t('ins.aiDetected')}
         </Badge>
       </div>
 
@@ -227,12 +202,12 @@ function ConnectionCard({ connection }: { connection: Connection }) {
       <div className="mt-auto flex items-center justify-between gap-3 border-t border-slate-200 pt-3">
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
-            Độ tự tin
+            {t('ins.confidence')}
           </span>
           <ConfidenceMeter value={connection.confidence} />
         </div>
         <Button variant="ghost" size="sm" className="shrink-0">
-          Khám phá
+          {t('ins.explore')}
           <ArrowUpRight className="ml-0.5 h-3.5 w-3.5" />
         </Button>
       </div>
@@ -241,6 +216,7 @@ function ConnectionCard({ connection }: { connection: Connection }) {
 }
 
 function RecommendationCard({ rec }: { rec: Recommendation }) {
+  const t = useT()
   const Icon = rec.icon
   return (
     <GlassCard variants={fadeUp} interactive glow className="relative flex h-full flex-col gap-4 overflow-hidden p-5">
@@ -253,11 +229,11 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
         >
           <Icon className="h-5 w-5" />
         </span>
-        <Badge tone={rec.badgeTone}>{rec.kind}</Badge>
+        <Badge tone={rec.badgeTone}>{t(rec.kindKey)}</Badge>
       </div>
       <div className="relative space-y-1.5">
-        <h3 className="text-base font-bold leading-snug text-slate-900">{rec.title}</h3>
-        <p className="text-sm leading-relaxed text-slate-500">{rec.description}</p>
+        <h3 className="text-base font-bold leading-snug text-slate-900">{t(rec.titleKey)}</h3>
+        <p className="text-sm leading-relaxed text-slate-500">{t(rec.descKey)}</p>
       </div>
       <Button
         variant="glass"
@@ -265,7 +241,7 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
         className="relative mt-auto w-full justify-center"
         whileHover={{ scale: 1.02 }}
       >
-        {rec.cta}
+        {t(rec.ctaKey)}
       </Button>
     </GlassCard>
   )
@@ -276,6 +252,7 @@ function RecommendationCard({ rec }: { rec: Recommendation }) {
 /* ------------------------------------------------------------------ */
 
 function KnowledgeGraph({ knowledgeClusters }: { knowledgeClusters: KnowledgeCluster[] }) {
+  const t = useT()
   const [hovered, setHovered] = useState<string | null>(null)
   const center = useMemo(
     () => knowledgeClusters.find((c) => c.id === 'kc5') ?? knowledgeClusters[0],
@@ -291,11 +268,11 @@ function KnowledgeGraph({ knowledgeClusters }: { knowledgeClusters: KnowledgeClu
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <Brain className="h-5 w-5 text-violet-500" />
-          <h2 className="text-lg font-bold text-slate-900">Bản đồ tri thức</h2>
+          <h2 className="text-lg font-bold text-slate-900">{t('ins.mapTitle')}</h2>
           <AIChip label="Live" />
         </div>
         <p className="text-sm text-slate-500">
-          {knowledgeClusters.length} cụm chủ đề · {knowledgeClusters.reduce((s, c) => s + c.files, 0)} tài liệu
+          {t('ins.mapMeta', { clusters: knowledgeClusters.length, files: knowledgeClusters.reduce((s, c) => s + c.files, 0) })}
         </p>
       </div>
 
@@ -371,7 +348,7 @@ function KnowledgeGraph({ knowledgeClusters }: { knowledgeClusters: KnowledgeClu
                 {c.label}
               </span>
               <span className="relative z-10 text-[10px] font-semibold text-slate-500">
-                {c.files} file
+                {t('ins.fileCount', { n: c.files })}
               </span>
             </motion.button>
           )
@@ -423,6 +400,7 @@ function TrendTooltip({
   payload?: TooltipPayloadItem[]
   label?: string | number
 }) {
+  const t = useT()
   if (!active || !payload || payload.length === 0) return null
   return (
     <div
@@ -435,13 +413,13 @@ function TrendTooltip({
         boxShadow: '0 8px 24px -12px rgba(16,24,40,0.2)',
       }}
     >
-      <p className="mb-1.5 text-xs font-bold text-slate-700">Tháng {label}</p>
+      <p className="mb-1.5 text-xs font-bold text-slate-700">{t('ins.trendMonth', { label: label ?? '' })}</p>
       <div className="space-y-1">
         {payload.map((item) => (
           <div key={String(item.dataKey)} className="flex items-center gap-2 text-xs">
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
             <span className="text-slate-500">{item.name}</span>
-            <span className="ml-auto font-bold tabular-nums text-slate-900">{item.value} file</span>
+            <span className="ml-auto font-bold tabular-nums text-slate-900">{t('ins.trendFile', { value: item.value ?? '' })}</span>
           </div>
         ))}
       </div>
@@ -450,21 +428,22 @@ function TrendTooltip({
 }
 
 function TopicTrends() {
+  const tt = useT()
   return (
     <GlassCard variants={fadeUpLg} className="p-5 sm:p-6">
       <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-emerald-500" />
-            <h2 className="text-lg font-bold text-slate-900">Xu hướng chủ đề</h2>
+            <h2 className="text-lg font-bold text-slate-900">{tt('ins.trendTitle')}</h2>
           </div>
-          <p className="mt-0.5 text-sm text-slate-500">Số tài liệu mới theo chủ đề · 6 tháng gần nhất</p>
+          <p className="mt-0.5 text-sm text-slate-500">{tt('ins.trendSubtitle')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          {topicMeta.map((t) => (
-            <span key={t.key} className="flex items-center gap-1.5 text-xs text-slate-600">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: t.color }} />
-              {t.label}
+          {topicMeta.map((tm) => (
+            <span key={tm.key} className="flex items-center gap-1.5 text-xs text-slate-600">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: tm.color }} />
+              {tt(tm.labelKey)}
             </span>
           ))}
         </div>
@@ -474,10 +453,10 @@ function TopicTrends() {
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={topicTrends} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
             <defs>
-              {topicMeta.map((t) => (
-                <linearGradient key={t.key} id={`grad-${t.key}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={t.color} stopOpacity={0.28} />
-                  <stop offset="100%" stopColor={t.color} stopOpacity={0.02} />
+              {topicMeta.map((tm) => (
+                <linearGradient key={tm.key} id={`grad-${tm.key}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={tm.color} stopOpacity={0.28} />
+                  <stop offset="100%" stopColor={tm.color} stopOpacity={0.02} />
                 </linearGradient>
               ))}
             </defs>
@@ -497,15 +476,15 @@ function TopicTrends() {
               width={36}
             />
             <Tooltip content={<TrendTooltip />} cursor={{ stroke: '#cbd5e1' }} />
-            {topicMeta.map((t) => (
+            {topicMeta.map((tm) => (
               <Area
-                key={t.key}
+                key={tm.key}
                 type="monotone"
-                dataKey={t.key}
-                name={t.label}
-                stroke={t.color}
+                dataKey={tm.key}
+                name={tt(tm.labelKey)}
+                stroke={tm.color}
                 strokeWidth={2.5}
-                fill={`url(#grad-${t.key})`}
+                fill={`url(#grad-${tm.key})`}
                 activeDot={{ r: 4, strokeWidth: 0 }}
               />
             ))}
@@ -537,19 +516,20 @@ function EmptyMessage({ children }: { children: ReactNode }) {
 }
 
 export function InsightsPage() {
-  const { data: insightsData, loading: insightsLoading } = useAsync(
+  const t = useT()
+  const { data: insightsData, loading: insightsLoading, reload: reloadInsights } = useAsync(
     () => api.insights() as Promise<Insight[]>,
     [],
   )
   const insights: Insight[] = (insightsData ?? []).map((i) => ({ ...i, trend: i.trend ?? 0 }))
 
-  const { data: clustersData, loading: clustersLoading } = useAsync(
+  const { data: clustersData, loading: clustersLoading, reload: reloadClusters } = useAsync(
     () => api.insightClusters() as Promise<KnowledgeCluster[]>,
     [],
   )
   const knowledgeClusters: KnowledgeCluster[] = clustersData ?? []
 
-  const { data: connectionsData, loading: connectionsLoading } = useAsync(
+  const { data: connectionsData, loading: connectionsLoading, reload: reloadConnections } = useAsync(
     () =>
       api.insightConnections() as Promise<
         { id: string; label: string; files: { id: string; name: string }[]; confidence: number }[]
@@ -557,27 +537,37 @@ export function InsightsPage() {
     [],
   )
   const connections: Connection[] = (connectionsData ?? []).map((c, idx) => {
-    const t = connectionTones[idx % connectionTones.length]
+    const tn = connectionTones[idx % connectionTones.length]
     return {
       id: c.id,
       title: c.label,
       reason: '',
       confidence: c.confidence ?? 0,
-      tone: t,
-      files: (c.files ?? []).map((f) => ({ id: f.id, name: f.name, type: 'doc' as FileType, tone: t })),
+      tone: tn,
+      files: (c.files ?? []).map((f) => ({ id: f.id, name: f.name, type: 'doc' as FileType, tone: tn })),
     }
   })
 
   return (
     <div className="space-y-8 pb-16">
       <PageHeader
-        eyebrow={<Badge tone="ai" dot>Khai thác tri thức</Badge>}
-        title="Khai thác tri thức"
-        subtitle="AI lục tung kho file của bạn, nối các mảnh ghép rời rạc thành những kết nối bất ngờ — não thứ hai chính thức online ✨"
+        eyebrow={<Badge tone="ai" dot>{t('ins.eyebrow')}</Badge>}
+        title={t('ins.title')}
+        subtitle={t('ins.subtitle')}
         actions={
-          <Button variant="primary" size="md" whileHover={{ scale: 1.03 }}>
+          <Button
+            variant="primary"
+            size="md"
+            whileHover={{ scale: 1.03 }}
+            disabled={insightsLoading || clustersLoading || connectionsLoading}
+            onClick={() => {
+              reloadInsights()
+              reloadClusters()
+              reloadConnections()
+            }}
+          >
             <Sparkles className="mr-1.5 h-4 w-4" />
-            Quét lại toàn bộ
+            {t('ins.rescan')}
           </Button>
         }
       />
@@ -587,7 +577,7 @@ export function InsightsPage() {
         {clustersLoading ? (
           <Spinner />
         ) : knowledgeClusters.length === 0 ? (
-          <EmptyMessage>Chưa có cụm tri thức nào — hãy tải thêm tài liệu để AI dệt bản đồ nhé!</EmptyMessage>
+          <EmptyMessage>{t('ins.noCluster')}</EmptyMessage>
         ) : (
           <KnowledgeGraph knowledgeClusters={knowledgeClusters} />
         )}
@@ -597,12 +587,12 @@ export function InsightsPage() {
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Lightbulb className="h-5 w-5 text-amber-500" />
-          <h2 className="text-lg font-bold text-slate-900">Phát hiện nổi bật</h2>
+          <h2 className="text-lg font-bold text-slate-900">{t('ins.topFindings')}</h2>
         </div>
         {insightsLoading ? (
           <Spinner />
         ) : insights.length === 0 ? (
-          <EmptyMessage>Chưa có phát hiện nào — AI sẽ học dần khi bạn dùng nhiều hơn ✨</EmptyMessage>
+          <EmptyMessage>{t('ins.noFindings')}</EmptyMessage>
         ) : (
           <motion.div
             variants={staggerContainer()}
@@ -627,14 +617,14 @@ export function InsightsPage() {
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <Network className="h-5 w-5 text-violet-500" />
-            <h2 className="text-lg font-bold text-slate-900">Kết nối vừa phát hiện</h2>
+            <h2 className="text-lg font-bold text-slate-900">{t('ins.connections')}</h2>
           </div>
-          <Badge tone="ai">{connections.length} mối liên hệ</Badge>
+          <Badge tone="ai">{t('ins.linkCount', { n: connections.length })}</Badge>
         </div>
         {connectionsLoading ? (
           <Spinner />
         ) : connections.length === 0 ? (
-          <EmptyMessage>Chưa phát hiện kết nối nào — thêm tài liệu để AI nối các mảnh ghép nhé!</EmptyMessage>
+          <EmptyMessage>{t('ins.noConnections')}</EmptyMessage>
         ) : (
           <motion.div
             variants={staggerContainer()}
@@ -653,7 +643,7 @@ export function InsightsPage() {
       <section className="space-y-4">
         <div className="flex items-center gap-2">
           <Sparkles className="h-5 w-5 text-rose-500" />
-          <h2 className="text-lg font-bold text-slate-900">Gợi ý cho bạn</h2>
+          <h2 className="text-lg font-bold text-slate-900">{t('ins.forYou')}</h2>
         </div>
         <motion.div
           variants={staggerContainer()}
@@ -676,11 +666,11 @@ export function InsightsPage() {
       >
         <motion.span variants={popIn} className="inline-flex">
           <Badge tone="ai" dot>
-            Đang học liên tục
+            {t('ins.learning')}
           </Badge>
         </motion.span>
         <p className="max-w-md text-sm text-slate-500">
-          Càng dùng nhiều, AI càng hiểu bạn. Mỗi file mới là một mảnh ghép để bản đồ tri thức thêm sáng 🌌
+          {t('ins.learningDesc')}
         </p>
       </motion.div>
     </div>

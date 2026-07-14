@@ -28,24 +28,66 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useApi'
-import type { SearchResult, Folder } from '@/lib/types'
+import type { SearchResult, Folder, FileType } from '@/lib/types'
 import { cn, formatBytes, timeAgo } from '@/lib/utils'
 import { fadeUp, fadeUpLg, popIn, scaleIn, staggerContainer } from '@/lib/motion'
 import { tone } from '@/lib/theme'
+import { useT, type TranslationKey } from '@/lib/i18n'
 
 type SearchMode = 'semantic' | 'keyword' | 'hybrid'
 
-const SEARCH_MODES: { id: SearchMode; label: string; icon: typeof Sparkles }[] = [
-  { id: 'semantic', label: 'Ngữ nghĩa', icon: Sparkles },
-  { id: 'keyword', label: 'Từ khóa', icon: Search },
-  { id: 'hybrid', label: 'Lai', icon: Zap },
+const SEARCH_MODES: { id: SearchMode; key: TranslationKey; icon: typeof Sparkles }[] = [
+  { id: 'semantic', key: 'search.modeSemantic', icon: Sparkles },
+  { id: 'keyword', key: 'search.modeKeyword', icon: Search },
+  { id: 'hybrid', key: 'search.modeHybrid', icon: Zap },
 ]
 
+// Giá trị filter giữ nguyên tiếng Việt làm ID ổn định (khớp map logic & tên
+// folder từ backend); chỉ phần hiển thị được dịch qua các map key bên dưới.
 const FILE_TYPE_FILTERS = ['Tất cả', 'PDF', 'Slide', 'Bảng tính', 'Code', 'Audio']
 const FOLDER_FILTERS = ['Mọi thư mục', 'Đại học', 'Công việc', 'Dự án cá nhân', 'Đọc sau']
 const TIME_FILTERS = ['Mọi lúc', '7 ngày', '30 ngày', 'Năm nay']
 
+const FILE_TYPE_KEYS: Record<string, TranslationKey> = {
+  'Tất cả': 'search.ftAll',
+  PDF: 'search.ftPdf',
+  Slide: 'search.ftSlide',
+  'Bảng tính': 'search.ftSheet',
+  Code: 'search.ftCode',
+  Audio: 'search.ftAudio',
+}
+const FOLDER_KEYS: Record<string, TranslationKey> = {
+  'Mọi thư mục': 'search.fdAll',
+  'Đại học': 'search.fdUniv',
+  'Công việc': 'search.fdWork',
+  'Dự án cá nhân': 'search.fdPersonal',
+  'Đọc sau': 'search.fdReadLater',
+}
+const TIME_KEYS: Record<string, TranslationKey> = {
+  'Mọi lúc': 'search.tmAll',
+  '7 ngày': 'search.tm7d',
+  '30 ngày': 'search.tm30d',
+  'Năm nay': 'search.tmYear',
+}
+
+// Map nhãn chip → các FileType khớp (lọc client-side).
+const FILE_TYPE_TO_TYPES: Record<string, FileType[]> = {
+  PDF: ['pdf'],
+  Slide: ['slide'],
+  'Bảng tính': ['sheet'],
+  Code: ['code'],
+  Audio: ['audio'],
+}
+
+// Map nhãn thời gian → số ngày tính từ hiện tại ('Năm nay' = 365 ngày).
+const TIME_TO_DAYS: Record<string, number> = {
+  '7 ngày': 7,
+  '30 ngày': 30,
+  'Năm nay': 365,
+}
+
 export function SearchPage() {
+  const t = useT()
   const [query, setQuery] = useState('')
   const [mode, setMode] = useState<SearchMode>('semantic')
   const [submitted, setSubmitted] = useState(false)
@@ -66,21 +108,9 @@ export function SearchPage() {
 
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
+  const [elapsed, setElapsed] = useState<number | null>(null)
 
   const hasQuery = query.trim().length > 0
-
-  const resultCount = results.length
-
-  // Nguồn cho thẻ "Trả lời từ AI": lấy 3 tài liệu khớp ý nhất
-  const aiSources = useMemo(
-    () =>
-      results.slice(0, 3).map((r) => ({
-        id: r.file.id,
-        name: r.file.name,
-        relevance: r.relevance,
-      })),
-    [results],
-  )
 
   const folderNameById = useMemo(() => {
     const map = new Map<string, string>()
@@ -88,12 +118,57 @@ export function SearchPage() {
     return map
   }, [foldersData])
 
+  // Lọc client-side theo các FilterChip (loại file / thư mục / thời gian).
+  const filteredResults = useMemo(() => {
+    return results.filter((r) => {
+      const file = r.file
+
+      // Loại file
+      if (fileType !== FILE_TYPE_FILTERS[0]) {
+        const label = FILE_TYPE_TO_TYPES[fileType]
+        if (label && !label.includes(file.type)) return false
+      }
+
+      // Thư mục (khớp theo tên hoặc ID)
+      if (folder !== FOLDER_FILTERS[0]) {
+        const name = folderNameById.get(file.folderId)
+        if (name !== folder && file.folderId !== folder) return false
+      }
+
+      // Thời gian (dựa trên updatedAt)
+      if (time !== TIME_FILTERS[0]) {
+        const days = TIME_TO_DAYS[time]
+        if (days != null) {
+          const ts = file.updatedAt ? new Date(file.updatedAt).getTime() : NaN
+          if (!Number.isFinite(ts)) return false
+          if (Date.now() - ts > days * 24 * 60 * 60 * 1000) return false
+        }
+      }
+
+      return true
+    })
+  }, [results, fileType, folder, time, folderNameById])
+
+  const resultCount = filteredResults.length
+
+  // Nguồn cho thẻ "Trả lời từ AI": lấy 3 tài liệu khớp ý nhất (sau khi lọc)
+  const aiSources = useMemo(
+    () =>
+      filteredResults.slice(0, 3).map((r) => ({
+        id: r.file.id,
+        name: r.file.name,
+        relevance: r.relevance,
+      })),
+    [filteredResults],
+  )
+
   const runSearch = async (q: string) => {
     if (!q.trim()) return
     setSubmitted(true)
     setSearching(true)
+    const startedAt = performance.now()
     try {
-      const data = await api.aiSearch({ query: q, mode: 'semantic' })
+      const data = await api.aiSearch({ query: q, mode })
       const concepts: string[] = data?.matchedConcepts ?? []
       const mapped: SearchResult[] = (data?.results ?? []).map((r: any) => ({
         file: {
@@ -103,16 +178,18 @@ export function SearchPage() {
           shared: false,
           aiProcessed: true,
           tags: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: '',
+          createdAt: r.file?.createdAt ?? new Date().toISOString(),
+          updatedAt: r.file?.updatedAt ?? r.file?.createdAt ?? '',
         },
         relevance: r.relevance,
         snippet: r.snippet,
         matchedConcepts: concepts,
       }))
       setResults(mapped)
+      setElapsed((performance.now() - startedAt) / 1000)
     } catch {
       setResults([])
+      setElapsed(null)
     } finally {
       setSearching(false)
     }
@@ -126,9 +203,9 @@ export function SearchPage() {
   return (
     <div className="relative">
       <PageHeader
-        eyebrow={<AIChip label="Tìm kiếm bằng AI" />}
-        title="Tìm theo ý nghĩa, không chỉ từ khóa ✨"
-        subtitle="Quên kiểu gõ đúng từ rồi mới ra kết quả đi. Cứ tả ý, CloudMind tự hiểu bạn đang cần gì 💜"
+        eyebrow={<AIChip label={t('search.chip')} />}
+        title={t('search.title')}
+        subtitle={t('search.subtitle')}
       />
 
       {/* ===== HERO SEARCH ===== */}
@@ -151,13 +228,13 @@ export function SearchPage() {
                   onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
                     if (e.key === 'Enter') handleSearch()
                   }}
-                  placeholder="Tả thử ý bạn đang tìm..."
+                  placeholder={t('search.placeholder')}
                   className="border-0 bg-transparent px-0 text-base focus:ring-0"
                 />
                 {hasQuery && (
                   <button
                     onClick={() => setQuery('')}
-                    aria-label="Xóa"
+                    aria-label={t('search.clear')}
                     className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-900"
                   >
                     <X className="h-4 w-4" />
@@ -172,7 +249,7 @@ export function SearchPage() {
                 whileTap={{ scale: 0.97 }}
               >
                 <Sparkles className="h-4 w-4" />
-                Tìm
+                {t('search.go')}
               </Button>
             </div>
           </div>
@@ -180,7 +257,7 @@ export function SearchPage() {
 
         {/* Example query chips */}
         <motion.div variants={fadeUp} className="mt-4 flex flex-wrap items-center justify-center gap-2">
-          <span className="mr-1 text-xs font-medium text-slate-400">Thử nhanh:</span>
+          <span className="mr-1 text-xs font-medium text-slate-400">{t('search.tryQuick')}</span>
           {suggestedPrompts.map((prompt) => (
             <motion.button
               key={prompt}
@@ -225,7 +302,7 @@ export function SearchPage() {
                     />
                   )}
                   <Icon className="relative z-10 h-3.5 w-3.5" />
-                  <span className="relative z-10">{m.label}</span>
+                  <span className="relative z-10">{t(m.key)}</span>
                 </button>
               )
             })}
@@ -250,13 +327,24 @@ export function SearchPage() {
               className="mb-4 flex flex-wrap items-center justify-between gap-2"
             >
               <p className="text-sm text-slate-500">
-                Đã tìm trong{' '}
-                <span className="font-semibold text-mint-600">0.3 giây</span> ·{' '}
-                <span className="font-semibold text-slate-900">{resultCount} kết quả</span> cho{' '}
-                <span className="text-slate-700">“{query}”</span>
+                {elapsed != null && (
+                  <>
+                    {t('search.searchedIn')}{' '}
+                    <span className="font-semibold text-mint-600">
+                      {t('search.seconds', { n: elapsed.toFixed(2) })}
+                    </span>{' '}
+                    ·{' '}
+                  </>
+                )}
+                <span className="font-semibold text-slate-900">
+                  {t('search.resultCount', { n: resultCount })}
+                </span>{' '}
+                {t('search.for')} <span className="text-slate-700">“{query}”</span>
               </p>
               <Badge tone="ai" dot>
-                Chế độ {SEARCH_MODES.find((m) => m.id === mode)?.label}
+                {t('search.modeLabel', {
+                  mode: t(SEARCH_MODES.find((m) => m.id === mode)?.key ?? 'search.modeSemantic'),
+                })}
               </Badge>
             </motion.div>
 
@@ -264,21 +352,29 @@ export function SearchPage() {
             <motion.div variants={fadeUp} className="mb-6 no-scrollbar -mx-1 overflow-x-auto px-1">
               <div className="flex min-w-max items-center gap-2">
                 <span className="hidden items-center gap-1.5 text-xs font-semibold text-slate-400 sm:flex">
-                  <Filter className="h-3.5 w-3.5" /> Lọc:
+                  <Filter className="h-3.5 w-3.5" /> {t('search.filter')}
                 </span>
                 <FilterChip
                   icon={FileText}
                   options={FILE_TYPE_FILTERS}
                   value={fileType}
                   onChange={setFileType}
+                  labelFor={(o) => (FILE_TYPE_KEYS[o] ? t(FILE_TYPE_KEYS[o]) : o)}
                 />
                 <FilterChip
                   icon={FolderOpen}
                   options={FOLDER_FILTERS}
                   value={folder}
                   onChange={setFolder}
+                  labelFor={(o) => (FOLDER_KEYS[o] ? t(FOLDER_KEYS[o]) : o)}
                 />
-                <FilterChip icon={Clock} options={TIME_FILTERS} value={time} onChange={setTime} />
+                <FilterChip
+                  icon={Clock}
+                  options={TIME_FILTERS}
+                  value={time}
+                  onChange={setTime}
+                  labelFor={(o) => (TIME_KEYS[o] ? t(TIME_KEYS[o]) : o)}
+                />
               </div>
             </motion.div>
 
@@ -289,25 +385,20 @@ export function SearchPage() {
                   <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-grape-100 blur-3xl" />
                   <div className="relative">
                     <div className="mb-3 flex items-center justify-between gap-3">
-                      <AIChip label="Trả lời từ AI" />
+                      <AIChip label={t('search.aiAnswer')} />
                       <span className="hidden items-center gap-1.5 text-xs text-slate-400 sm:flex">
                         <Sparkles className="h-3.5 w-3.5 text-grape-500" />
-                        Tổng hợp từ {aiSources.length} tài liệu của bạn
+                        {t('search.synthFrom', { n: aiSources.length })}
                       </span>
                     </div>
 
                     <p className="text-[15px] leading-relaxed text-slate-700">
-                      Dựa trên <span className="font-semibold text-slate-900">{aiSources.length} tài liệu</span> khớp ý nhất với{' '}
-                      <span className="text-slate-700">“{query}”</span>, CloudMind dùng{' '}
-                      <span className="text-gradient font-semibold">tìm kiếm ngữ nghĩa</span> để hiểu ý bạn thay vì chỉ so khớp
-                      từ khóa — so khớp{' '}
-                      <span className="font-semibold text-mint-600">độ tương đồng</span> giữa truy vấn và nội dung tài liệu để
-                      trả về những kết quả gần ý nhất kèm nguồn rõ ràng. 🔍✨
+                      {t('search.aiBody', { count: aiSources.length, query })}
                     </p>
 
                     {/* Inline source chips */}
                     <div className="mt-4 flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium text-slate-400">Nguồn:</span>
+                      <span className="text-xs font-medium text-slate-400">{t('search.sources')}</span>
                       {aiSources.map((s) => (
                         <motion.div
                           key={s.id}
@@ -331,7 +422,7 @@ export function SearchPage() {
             {/* Results list */}
             <motion.div variants={fadeUp} className="mb-3 flex items-center gap-2">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-400">
-                Tài liệu liên quan
+                {t('search.relatedDocs')}
               </h2>
               <span className="h-px flex-1 bg-gradient-to-r from-slate-300 to-transparent" />
             </motion.div>
@@ -340,28 +431,28 @@ export function SearchPage() {
               {searching ? (
                 <div className="flex items-center justify-center gap-3 py-12 text-sm text-slate-500">
                   <span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-grape-500" />
-                  Đang tìm trong tài liệu của bạn...
+                  {t('search.searching')}
                 </div>
-              ) : results.length > 0 ? (
-                results.map((result, i) => (
+              ) : filteredResults.length > 0 ? (
+                filteredResults.map((result, i) => (
                   <ResultCard
                     key={result.file.id}
                     result={result}
                     rank={i + 1}
-                    folderName={folderNameById.get(result.file.folderId) ?? 'Chưa phân loại'}
+                    folderName={folderNameById.get(result.file.folderId) ?? t('search.uncategorized')}
                   />
                 ))
               ) : (
                 <EmptyState
                   icon={Search}
-                  title="Không tìm thấy tài liệu phù hợp 🙈"
-                  description="Thử mô tả ý bạn theo cách khác, hoặc tải thêm tài liệu lên để CloudMind có nhiều thứ để tìm hơn nhé."
+                  title={t('search.noResultsTitle')}
+                  description={t('search.noResultsDesc')}
                 />
               )}
             </div>
 
             {/* Footer reassurance */}
-            {!searching && results.length > 0 && (
+            {!searching && filteredResults.length > 0 && (
               <motion.div variants={fadeUp} className="mt-8">
                 <GradientFooterCta query={query} />
               </motion.div>
@@ -378,8 +469,8 @@ export function SearchPage() {
           >
             <EmptyState
               icon={Search}
-              title="Bạn đang tìm gì nè? 👀"
-              description="Gõ một câu mô tả ý bạn muốn tìm, hoặc bấm thử một gợi ý ở trên. CloudMind sẽ hiểu thay vì bắt bạn nhớ đúng từ."
+              title={t('search.emptyTitle')}
+              description={t('search.emptyDesc')}
             />
           </motion.div>
         )}
@@ -402,13 +493,16 @@ function FilterChip({
   options,
   value,
   onChange,
+  labelFor,
 }: {
   icon: typeof FileText
   options: string[]
   value: string
   onChange: (v: string) => void
+  labelFor?: (opt: string) => string
 }) {
   const [open, setOpen] = useState(false)
+  const label = (opt: string) => (labelFor ? labelFor(opt) : opt)
   return (
     <div className="relative shrink-0">
       <button
@@ -421,7 +515,7 @@ function FilterChip({
         )}
       >
         <Icon className="h-3.5 w-3.5" />
-        {value}
+        {label(value)}
         <ChevronRight
           className={cn('h-3 w-3 transition-transform', open ? 'rotate-90' : 'rotate-0')}
         />
@@ -455,7 +549,7 @@ function FilterChip({
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
                   )}
                 >
-                  {opt}
+                  {label(opt)}
                   {opt === value && <Sparkles className="h-3 w-3 text-grape-500" />}
                 </button>
               ))}
@@ -476,6 +570,7 @@ function ResultCard({
   rank: number
   folderName: string
 }) {
+  const t = useT()
   const { file, relevance, snippet, matchedConcepts } = result
   const pct = Math.round(relevance * 100)
   return (
@@ -507,7 +602,9 @@ function ResultCard({
                 />
                 <span className="truncate text-slate-900">{file.name}</span>
               </h3>
-              <Badge tone={pct >= 90 ? 'mint' : pct >= 80 ? 'ai' : 'sky'}>{pct}% khớp</Badge>
+              <Badge tone={pct >= 90 ? 'mint' : pct >= 80 ? 'ai' : 'sky'}>
+                {t('search.matchPct', { n: pct })}
+              </Badge>
             </div>
 
             {/* Snippet */}
@@ -518,7 +615,7 @@ function ResultCard({
 
             {/* Matched concepts */}
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <span className="text-[11px] font-medium text-slate-400">Khớp ý:</span>
+              <span className="text-[11px] font-medium text-slate-400">{t('search.matchConcepts')}</span>
               {matchedConcepts.map((concept) => (
                 <span
                   key={concept}
@@ -553,6 +650,7 @@ function ResultCard({
 }
 
 function GradientFooterCta({ query }: { query: string }) {
+  const t = useT()
   return (
     <motion.div variants={scaleIn}>
       <GlassCard className="relative overflow-hidden p-5 text-center sm:p-6">
@@ -561,13 +659,13 @@ function GradientFooterCta({ query }: { query: string }) {
           <span className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-2xl bg-gradient-brand shadow-glow">
             <Sparkles className="h-5 w-5 text-white" />
           </span>
-          <h3 className="text-base font-bold text-slate-900">Chưa thấy đúng cái cần? 🤔</h3>
+          <h3 className="text-base font-bold text-slate-900">{t('search.ctaTitle')}</h3>
           <p className="mx-auto mt-1.5 max-w-md text-sm text-slate-500">
-            Hỏi thẳng AI về “{query}” để được tổng hợp chi tiết từ toàn bộ tài liệu của bạn, kèm trích dẫn nguồn rõ ràng.
+            {t('search.ctaDesc', { query })}
           </p>
           <Button variant="secondary" size="md" className="mt-4" whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
             <Sparkles className="h-4 w-4" />
-            Hỏi AI sâu hơn
+            {t('search.ctaBtn')}
           </Button>
         </div>
       </GlassCard>

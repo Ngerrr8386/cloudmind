@@ -34,6 +34,7 @@ import type { StoredFile } from '@/lib/types'
 import { fadeUp, staggerContainer, spring, softSpring } from '@/lib/motion'
 import { cn, seededRandom } from '@/lib/utils'
 import { tone } from '@/lib/theme'
+import { useT, type TranslationKey } from '@/lib/i18n'
 
 type SummaryLength = 'short' | 'medium' | 'detailed'
 
@@ -43,10 +44,10 @@ interface SummaryResult {
   keywords: string[]
 }
 
-const lengthOptions: { id: SummaryLength; label: string; emoji: string }[] = [
-  { id: 'short', label: 'Ngắn', emoji: '⚡' },
-  { id: 'medium', label: 'Vừa', emoji: '📄' },
-  { id: 'detailed', label: 'Chi tiết', emoji: '📚' },
+const lengthOptions: { id: SummaryLength; labelKey: TranslationKey; emoji: string }[] = [
+  { id: 'short', labelKey: 'sum.lenShort', emoji: '⚡' },
+  { id: 'medium', labelKey: 'sum.lenMedium', emoji: '📄' },
+  { id: 'detailed', labelKey: 'sum.lenDetailed', emoji: '📚' },
 ]
 
 /** Deterministic "page count" so compression stats feel real & stable per file. */
@@ -55,30 +56,38 @@ function pseudoPages(file: StoredFile): number {
   return 6 + Math.floor(seededRandom(seed) * 54) // 6..59 trang
 }
 
-const lengthMeta: Record<SummaryLength, { points: string; ratio: string }> = {
-  short: { points: '3 ý', ratio: '96%' },
-  medium: { points: '5 ý', ratio: '92%' },
-  detailed: { points: '8 ý', ratio: '84%' },
+const lengthMeta: Record<SummaryLength, { points: number; ratio: string }> = {
+  short: { points: 3, ratio: '96%' },
+  medium: { points: 5, ratio: '92%' },
+  detailed: { points: 8, ratio: '84%' },
 }
 
 export function SummariesPage() {
   const navigate = useNavigate()
   const { openUpload } = useAppContext()
   const { user } = useAuth()
+  const t = useT()
 
   const { data: fileData, loading: filesLoading } = useAsync(
     () => api.files({ limit: 50 }).then((r) => r.items),
     [],
   )
 
-  const summarized = useMemo<StoredFile[]>(
+  // Danh sách chọn = mọi tài liệu đã xử lý AI (đã có embedding → tóm tắt được),
+  // KHÔNG chỉ file đã có sẵn tóm tắt. Chọn một file sẽ sinh tóm tắt on-demand.
+  // (Trước đây lọc thêm `&& f.aiSummary` khiến file mới/ trong folder chưa từng
+  //  tóm tắt không bao giờ xuất hiện để chọn.)
+  const docs = useMemo<StoredFile[]>(
     () =>
-      ((fileData as StoredFile[] | null) ?? []).map((f) => ({
-        ...f,
-        owner: f.owner ?? user?.name ?? '',
-      })),
+      ((fileData as StoredFile[] | null) ?? [])
+        .filter((f) => f.aiProcessed)
+        .map((f) => ({
+          ...f,
+          owner: f.owner ?? user?.name ?? '',
+        })),
     [fileData, user?.name],
   )
+  const summarizedCount = useMemo(() => docs.filter((f) => f.aiSummary).length, [docs])
 
   const [selectedId, setSelectedId] = useState<string>('')
   const [length, setLength] = useState<SummaryLength>('medium')
@@ -87,14 +96,14 @@ export function SummariesPage() {
   const [summary, setSummary] = useState<SummaryResult | null>(null)
 
   const selected = useMemo(
-    () => summarized.find((f) => f.id === selectedId) ?? summarized[0],
-    [summarized, selectedId],
+    () => docs.find((f) => f.id === selectedId) ?? docs[0],
+    [docs, selectedId],
   )
 
   // Đảm bảo có file được chọn khi dữ liệu tải xong.
   useEffect(() => {
-    if (!selectedId && summarized.length > 0) setSelectedId(summarized[0].id)
-  }, [selectedId, summarized])
+    if (!selectedId && docs.length > 0) setSelectedId(docs[0].id)
+  }, [selectedId, docs])
 
   // Tải tóm tắt cho file đang chọn + độ dài hiện tại.
   useEffect(() => {
@@ -121,8 +130,8 @@ export function SummariesPage() {
   }, [selected?.id, length])
 
   const totalPages = useMemo(
-    () => summarized.reduce((acc, f) => acc + pseudoPages(f), 0),
-    [summarized],
+    () => docs.reduce((acc, f) => acc + pseudoPages(f), 0),
+    [docs],
   )
 
   function handleSelect(id: string) {
@@ -143,6 +152,26 @@ export function SummariesPage() {
     window.setTimeout(() => setCopied(false), 1800)
   }
 
+  function handleExport() {
+    if (!summary || !selected) return
+    const lines: string[] = [`# ${selected.name}`, '', summary.content]
+    if (summary.keyPoints?.length) {
+      lines.push('', `## ${t('sum.keyPoints')}`, ...summary.keyPoints.map((p, i) => `${i + 1}. ${p}`))
+    }
+    if (summary.keywords?.length) {
+      lines.push('', `## ${t('sum.keywords')}`, summary.keywords.map((k) => `#${k}`).join(' '))
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${selected.name.replace(/\.[^./\\]+$/, '')}-${t('sum.filenameSuffix')}.md`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   if (filesLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -159,13 +188,13 @@ export function SummariesPage() {
   return (
     <div className="pb-12">
       <PageHeader
-        eyebrow={<AIChip label="AI Summaries" />}
-        title="Tóm tắt thông minh 🪄"
-        subtitle="Quăng tài liệu dài thượt vào đây, AI nhả ra ý chính trong vài giây. Đọc 5 ý thay vì 40 trang — sướng cái não!"
+        eyebrow={<AIChip label={t('sum.chip')} />}
+        title={t('sum.title')}
+        subtitle={t('sum.subtitle')}
         actions={
           <Button onClick={openUpload}>
             <Wand2 className="h-4 w-4" />
-            Tóm tắt tài liệu mới
+            {t('sum.newDoc')}
           </Button>
         }
       />
@@ -179,24 +208,24 @@ export function SummariesPage() {
       >
         <StatCard
           icon={ListChecks}
-          label="Tài liệu đã tóm tắt"
-          value={String(summarized.length)}
+          label={t('sum.statDocs')}
+          value={String(summarizedCount)}
           trend={16}
           tone="violet"
         />
         <StatCard
           icon={Clock}
-          label="Thời gian tiết kiệm"
+          label={t('sum.statTime')}
           value="14.6"
-          suffix="giờ"
+          suffix={t('sum.hours')}
           trend={23}
           tone="emerald"
         />
         <StatCard
           icon={Layers}
-          label="Trang đã xử lý"
+          label={t('sum.statPages')}
           value={totalPages.toLocaleString('vi-VN')}
-          suffix="trang"
+          suffix={t('sum.pagesUnit')}
           trend={9}
           tone="indigo"
         />
@@ -208,8 +237,8 @@ export function SummariesPage() {
         <div>
           <div className="mb-3 flex items-center justify-between px-1">
             <h2 className="text-sm font-bold text-slate-700">
-              Đã tóm tắt
-              <span className="ml-2 text-slate-400">({summarized.length})</span>
+              {t('sum.docList')}
+              <span className="ml-2 text-slate-400">({docs.length})</span>
             </h2>
             <Badge tone="ai" dot>
               live
@@ -222,7 +251,7 @@ export function SummariesPage() {
             animate="show"
             className="flex flex-col gap-3"
           >
-            {summarized.map((file) => {
+            {docs.map((file) => {
               const active = file.id === selectedId
               return (
                 <motion.div key={file.id} variants={fadeUp}>
@@ -259,17 +288,17 @@ export function SummariesPage() {
                           </p>
                         </div>
                         <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">
-                          {file.aiSummary}
+                          {file.aiSummary || t('sum.tapToSummarize')}
                         </p>
                         <div className="mt-2 flex items-center gap-2 text-[11px] font-medium text-slate-400">
                           <span className={cn('font-bold', fileTint(file.type))}>
-                            {fileTypeLabel[file.type]}
+                            {t(fileTypeLabel[file.type])}
                           </span>
                           <span className="h-1 w-1 rounded-full bg-slate-300" />
-                          <span>{pseudoPages(file)} trang</span>
+                          <span>{t('sum.pages', { n: pseudoPages(file) })}</span>
                           <span className="h-1 w-1 rounded-full bg-slate-300" />
                           <span className="inline-flex items-center gap-1 text-violet-500">
-                            <Sparkles className="h-3 w-3" /> đã xử lý
+                            <Sparkles className="h-3 w-3" /> {t('sum.processed')}
                           </span>
                         </div>
                       </div>
@@ -279,10 +308,10 @@ export function SummariesPage() {
               )
             })}
 
-            {summarized.length === 0 && (
+            {docs.length === 0 && (
               <motion.div variants={fadeUp}>
                 <GlassCard className="p-6 text-center text-sm text-slate-500">
-                  Chưa có tài liệu nào — hãy tải lên để AI tóm tắt giúp bạn! ✨
+                  {t('sum.empty')}
                 </GlassCard>
               </motion.div>
             )}
@@ -301,8 +330,8 @@ export function SummariesPage() {
                 <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-gradient-brand shadow-glow">
                   <Sparkles className="h-6 w-6 text-white" />
                 </div>
-                <p className="text-sm font-semibold text-slate-700">Chọn một tài liệu để xem tóm tắt</p>
-                <p className="mt-1 text-xs text-slate-400">AI sẽ chắt lọc ý chính chỉ trong vài giây.</p>
+                <p className="text-sm font-semibold text-slate-700">{t('sum.pickPrompt')}</p>
+                <p className="mt-1 text-xs text-slate-400">{t('sum.pickHint')}</p>
               </div>
             </div>
           ) : (
@@ -328,14 +357,14 @@ export function SummariesPage() {
                   </div>
                   <div className="min-w-0">
                     <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                      <AIChip label="Tóm tắt bởi AI" />
-                      <Badge tone="neutral">{fileTypeLabel[selected.type]}</Badge>
+                      <AIChip label={t('sum.byAi')} />
+                      <Badge tone="neutral">{t(fileTypeLabel[selected.type])}</Badge>
                     </div>
                     <h2 className="text-lg font-extrabold leading-snug tracking-tight text-slate-900 sm:text-xl">
                       {selected.name}
                     </h2>
                     <p className="mt-1 text-xs text-slate-400">
-                      {pages} trang · cập nhật {selected.updatedAt} · {selected.owner}
+                      {t('sum.detailMeta', { pages, date: selected.updatedAt, owner: selected.owner })}
                     </p>
                   </div>
                 </div>
@@ -365,7 +394,7 @@ export function SummariesPage() {
                         )}
                         <span className="relative flex items-center gap-1.5">
                           <span>{opt.emoji}</span>
-                          {opt.label}
+                          {t(opt.labelKey)}
                         </span>
                       </button>
                     )
@@ -386,7 +415,7 @@ export function SummariesPage() {
                       >
                         <Sparkles className="h-3.5 w-3.5" />
                       </motion.span>
-                      <span className="shimmer-text">đang tạo lại...</span>
+                      <span className="shimmer-text">{t('sum.regenerating')}</span>
                     </motion.span>
                   )}
                 </AnimatePresence>
@@ -414,7 +443,7 @@ export function SummariesPage() {
                       </div>
                     ) : (
                       <p className="text-[15px] leading-relaxed text-slate-600">
-                        {summary?.content ?? 'Chưa có tóm tắt cho tài liệu này.'}
+                        {summary?.content ?? t('sum.noSummary')}
                       </p>
                     )}
                   </motion.div>
@@ -427,8 +456,8 @@ export function SummariesPage() {
                   <div className={cn('grid h-7 w-7 place-items-center rounded-xl', tone('emerald').soft)}>
                     <ListChecks className="h-4 w-4" />
                   </div>
-                  <h3 className="text-sm font-bold text-slate-800">Điểm chính</h3>
-                  <span className="text-xs text-slate-400">· {meta.points}</span>
+                  <h3 className="text-sm font-bold text-slate-800">{t('sum.keyPoints')}</h3>
+                  <span className="text-xs text-slate-400">· {t('sum.points', { n: meta.points })}</span>
                 </div>
                 <motion.ul
                   key={selected.id + length + '-points'}
@@ -456,7 +485,7 @@ export function SummariesPage() {
               <div className="mt-7">
                 <div className="mb-3 flex items-center gap-2">
                   <Tag className="h-4 w-4 text-sky-500" />
-                  <h3 className="text-sm font-bold text-slate-800">Từ khóa</h3>
+                  <h3 className="text-sm font-bold text-slate-800">{t('sum.keywords')}</h3>
                 </div>
                 <motion.div
                   variants={staggerContainer(0.05)}
@@ -489,18 +518,18 @@ export function SummariesPage() {
                     </div>
                     <div>
                       <p className="text-sm font-bold text-slate-900">
-                        {pages} trang{' '}
-                        <ArrowRight className="inline h-3.5 w-3.5 text-slate-400" /> {meta.points}
+                        {t('sum.pages', { n: pages })}{' '}
+                        <ArrowRight className="inline h-3.5 w-3.5 text-slate-400" /> {t('sum.points', { n: meta.points })}
                       </p>
                       <p className="text-xs text-slate-500">
-                        AI nén nội dung mà vẫn giữ nguyên ý cốt lõi 🤏
+                        {t('sum.compressDesc')}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-extrabold text-gradient">tiết kiệm {meta.ratio}</p>
+                    <p className="text-2xl font-extrabold text-gradient">{t('sum.saved', { ratio: meta.ratio })}</p>
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                      công sức đọc
+                      {t('sum.readingEffort')}
                     </p>
                   </div>
                 </div>
@@ -518,7 +547,7 @@ export function SummariesPage() {
                         exit={{ opacity: 0, scale: 0.8 }}
                         className="inline-flex items-center gap-1.5 text-emerald-600"
                       >
-                        <Check className="h-4 w-4" /> Đã chép!
+                        <Check className="h-4 w-4" /> {t('sum.copied')}
                       </motion.span>
                     ) : (
                       <motion.span
@@ -528,7 +557,7 @@ export function SummariesPage() {
                         exit={{ opacity: 0, scale: 0.8 }}
                         className="inline-flex items-center gap-1.5"
                       >
-                        <Copy className="h-4 w-4" /> Sao chép
+                        <Copy className="h-4 w-4" /> {t('sum.copy')}
                       </motion.span>
                     )}
                   </AnimatePresence>
@@ -540,11 +569,17 @@ export function SummariesPage() {
                   className="flex-1 sm:flex-none"
                 >
                   <MessageCircleQuestion className="h-4 w-4" />
-                  Hỏi thêm
+                  {t('sum.askMore')}
                 </Button>
-                <Button variant="outline" size="sm" className="flex-1 sm:flex-none">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExport}
+                  disabled={!summary}
+                  className="flex-1 sm:flex-none"
+                >
                   <Download className="h-4 w-4" />
-                  Xuất
+                  {t('sum.export')}
                 </Button>
               </div>
             </motion.div>

@@ -3,14 +3,16 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
 import { Logo, Button } from '@/components/ui'
+import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher'
 import { useAuth } from '@/lib/auth'
+import { useT, type TranslationKey } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-const links = [
-  { label: 'Tính năng', href: '#features' },
-  { label: 'Cách hoạt động', href: '#how' },
-  { label: 'Bảng giá', href: '/pricing' },
-  { label: 'Đánh giá', href: '#testimonials' },
+const links: { labelKey: TranslationKey; href: string }[] = [
+  { labelKey: 'nav.features', href: '#features' },
+  { labelKey: 'nav.how', href: '#how' },
+  { labelKey: 'nav.pricing', href: '/pricing' },
+  { labelKey: 'nav.testimonials', href: '#testimonials' },
 ]
 
 export function MarketingNav() {
@@ -18,6 +20,7 @@ export function MarketingNav() {
   const [open, setOpen] = useState(false)
   const navigate = useNavigate()
   const { user } = useAuth()
+  const t = useT()
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -43,24 +46,25 @@ export function MarketingNav() {
         <nav className="hidden items-center gap-1 md:flex">
           {links.map((l) =>
             l.href.startsWith('#') ? (
-              <a key={l.label} href={l.href} className="rounded-xl px-3.5 py-2 text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900 hover:bg-slate-100">
-                {l.label}
+              <a key={l.labelKey} href={l.href} className="rounded-xl px-3.5 py-2 text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900 hover:bg-slate-100">
+                {t(l.labelKey)}
               </a>
             ) : (
-              <Link key={l.label} to={l.href} className="rounded-xl px-3.5 py-2 text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900 hover:bg-slate-100">
-                {l.label}
+              <Link key={l.labelKey} to={l.href} className="rounded-xl px-3.5 py-2 text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900 hover:bg-slate-100">
+                {t(l.labelKey)}
               </Link>
             ),
           )}
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
+          <LanguageSwitcher />
           {user ? (
-            <Button size="sm" onClick={() => navigate('/app')}>Vào ứng dụng</Button>
+            <Button size="sm" onClick={() => navigate('/app')}>{t('nav.openApp')}</Button>
           ) : (
             <>
-              <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>Đăng nhập</Button>
-              <Button size="sm" onClick={() => navigate('/signup')}>Dùng thử miễn phí</Button>
+              <Button variant="ghost" size="sm" onClick={() => navigate('/login')}>{t('nav.login')}</Button>
+              <Button size="sm" onClick={() => navigate('/signup')}>{t('nav.tryFree')}</Button>
             </>
           )}
         </div>
@@ -79,17 +83,18 @@ export function MarketingNav() {
             className="mx-auto mt-2 max-w-6xl rounded-2xl glass-strong shadow-card p-3 md:hidden"
           >
             {links.map((l) => (
-              <a key={l.label} href={l.href} onClick={() => setOpen(false)} className="block rounded-xl px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-100">
-                {l.label}
+              <a key={l.labelKey} href={l.href} onClick={() => setOpen(false)} className="block rounded-xl px-4 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-100">
+                {t(l.labelKey)}
               </a>
             ))}
-            <div className="mt-2 flex gap-2 px-1">
+            <div className="mt-2 flex items-center gap-2 px-1">
+              <LanguageSwitcher />
               {user ? (
-                <Button size="sm" className="flex-1" onClick={() => { setOpen(false); navigate('/app') }}>Vào ứng dụng</Button>
+                <Button size="sm" className="flex-1" onClick={() => { setOpen(false); navigate('/app') }}>{t('nav.openApp')}</Button>
               ) : (
                 <>
-                  <Button variant="glass" size="sm" className="flex-1" onClick={() => { setOpen(false); navigate('/login') }}>Đăng nhập</Button>
-                  <Button size="sm" className="flex-1" onClick={() => { setOpen(false); navigate('/signup') }}>Dùng thử</Button>
+                  <Button variant="glass" size="sm" className="flex-1" onClick={() => { setOpen(false); navigate('/login') }}>{t('nav.login')}</Button>
+                  <Button size="sm" className="flex-1" onClick={() => { setOpen(false); navigate('/signup') }}>{t('nav.try')}</Button>
                 </>
               )}
             </div>

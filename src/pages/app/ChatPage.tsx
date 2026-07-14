@@ -14,6 +14,7 @@ import {
 import { Button, Badge, AIChip, Avatar, FileTypeIcon, fileTint } from '@/components/ui'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { useT } from '@/lib/i18n'
 import { useAsync } from '@/lib/useApi'
 import type { ChatMessage, ChatSource, StoredFile } from '@/lib/types'
 import type { Tone } from '@/lib/theme'
@@ -100,6 +101,7 @@ function TypingDots() {
  * ------------------------------------------------------------------ */
 
 function SourceCard({ source }: { source: ChatSource }) {
+  const t = useT()
   const pct = Math.round(source.relevance * 100)
   return (
     <motion.div
@@ -115,13 +117,13 @@ function SourceCard({ source }: { source: ChatSource }) {
             <p className="truncate text-xs font-semibold text-slate-900">{source.fileName}</p>
             {source.page !== undefined && (
               <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
-                tr.{source.page}
+                {t('chat.pageAbbr', { page: source.page })}
               </span>
             )}
           </div>
           <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-slate-500">{source.snippet}</p>
           <div className="mt-2 flex items-center gap-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wide text-mint-500">khớp</span>
+            <span className="text-[10px] font-bold uppercase tracking-wide text-mint-500">{t('chat.match')}</span>
             <div className="h-1 w-14 overflow-hidden rounded-full bg-slate-100">
               <motion.div
                 className="h-full rounded-full bg-gradient-to-r from-mint-500 to-sky2-500"
@@ -143,6 +145,7 @@ function SourceCard({ source }: { source: ChatSource }) {
  * ------------------------------------------------------------------ */
 
 function ThinkingBlock({ thinking }: { thinking: string }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   return (
     <div className="mt-3 overflow-hidden rounded-2xl border border-grape-200 bg-grape-50">
@@ -152,7 +155,7 @@ function ThinkingBlock({ thinking }: { thinking: string }) {
         className="flex w-full items-center gap-2 px-3 py-2 text-left ring-focus"
       >
         <Brain className="h-3.5 w-3.5 text-grape-500" />
-        <span className="text-[11px] font-bold text-grape-600">CloudMind đang suy nghĩ</span>
+        <span className="text-[11px] font-bold text-grape-600">{t('chat.thinking')}</span>
         <motion.span animate={{ rotate: open ? 180 : 0 }} transition={spring} className="ml-auto text-grape-500">
           <ChevronDown className="h-3.5 w-3.5" />
         </motion.span>
@@ -181,6 +184,7 @@ const MessageBubble = forwardRef<
   HTMLDivElement,
   { message: ChatMessage; userInitials: string; userTone: Tone }
 >(function MessageBubble({ message, userInitials, userTone }, ref) {
+  const t = useT()
   const isUser = message.role === 'user'
   return (
     <motion.div
@@ -216,7 +220,7 @@ const MessageBubble = forwardRef<
               <div className="mb-2 flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5 text-grape-500" />
                 <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                  Nguồn trích dẫn · {message.sources.length}
+                  {t('chat.citedSources', { count: message.sources.length })}
                 </span>
               </div>
               <motion.div
@@ -257,6 +261,7 @@ function EmptyHero({
   fileCount: number
   prompts: string[]
 }) {
+  const t = useT()
   return (
     <motion.div
       variants={staggerContainer(0.08)}
@@ -278,11 +283,12 @@ function EmptyHero({
       </motion.div>
 
       <motion.h2 variants={fadeUp} className="max-w-md text-balance text-xl font-extrabold text-slate-900 sm:text-2xl">
-        Mình đã đọc xong{' '}
-        <span className="text-gradient">{fileCount} tài liệu</span> của bạn 🤓
+        {t('chat.heroReadPre')}{' '}
+        <span className="text-gradient">{t('chat.heroReadCount', { count: fileCount })}</span>{' '}
+        {t('chat.heroReadPost')}
       </motion.h2>
       <motion.p variants={fadeUp} className="mt-2 max-w-sm text-sm text-slate-500">
-        Hỏi gì cũng được — mình trả lời kèm trích dẫn từ chính file của bạn. Bắt đầu bằng một gợi ý nha 👇
+        {t('chat.heroSubtitle')}
       </motion.p>
 
       <motion.div variants={fadeUp} className="mt-7 flex max-w-xl flex-wrap items-center justify-center gap-2.5">
@@ -310,6 +316,7 @@ function EmptyHero({
  * ------------------------------------------------------------------ */
 
 function ContextPanel({ files }: { files: StoredFile[] }) {
+  const t = useT()
   const contextFiles = files.slice(0, 5)
   return (
     <aside className="hidden w-72 shrink-0 lg:block">
@@ -317,10 +324,10 @@ function ContextPanel({ files }: { files: StoredFile[] }) {
         <div className="glass-strong rounded-3xl p-5">
           <div className="mb-1 flex items-center gap-2">
             <FileText className="h-4 w-4 text-grape-500" />
-            <h3 className="text-sm font-bold text-slate-900">Nguồn tài liệu</h3>
+            <h3 className="text-sm font-bold text-slate-900">{t('chat.sourceDocs')}</h3>
           </div>
           <p className="mb-4 text-xs text-slate-500">
-            {contextFiles.length} file đang được đưa vào ngữ cảnh trò chuyện
+            {t('chat.filesInContext', { count: contextFiles.length })}
           </p>
 
           <motion.div variants={staggerContainer(0.06)} initial="hidden" animate="show" className="space-y-2">
@@ -348,10 +355,10 @@ function ContextPanel({ files }: { files: StoredFile[] }) {
         <div className="glass rounded-3xl p-5">
           <div className="mb-2 flex items-center gap-2">
             <Brain className="h-4 w-4 text-mint-500" />
-            <h3 className="text-sm font-bold text-slate-900">Mẹo nhỏ</h3>
+            <h3 className="text-sm font-bold text-slate-900">{t('chat.tip')}</h3>
           </div>
           <p className="text-xs leading-relaxed text-slate-500">
-            Hỏi càng cụ thể, mình trả lời càng chuẩn. Thử kèm tên file hoặc khoảng thời gian để khoanh vùng nhanh hơn nha! 💡
+            {t('chat.tipDesc')}
           </p>
         </div>
       </div>
@@ -364,6 +371,7 @@ function ContextPanel({ files }: { files: StoredFile[] }) {
  * ------------------------------------------------------------------ */
 
 export function ChatPage() {
+  const t = useT()
   const { user } = useAuth()
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -483,10 +491,10 @@ export function ChatPage() {
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h1 className="truncate text-base font-extrabold text-slate-900 sm:text-lg">Hỏi đáp tài liệu</h1>
+              <h1 className="truncate text-base font-extrabold text-slate-900 sm:text-lg">{t('nav.chat')}</h1>
               <AIChip label="RAG" />
             </div>
-            <p className="hidden text-xs text-slate-500 sm:block">Trả lời kèm trích dẫn từ chính file của bạn</p>
+            <p className="hidden text-xs text-slate-500 sm:block">{t('chat.headerSubtitle')}</p>
           </div>
 
           <div className="ml-auto flex items-center gap-2">
@@ -495,8 +503,8 @@ export function ChatPage() {
             </Badge>
             <Button variant="glass" size="sm" onClick={resetChat} className="gap-1.5">
               <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Cuộc trò chuyện mới</span>
-              <span className="sm:hidden">Mới</span>
+              <span className="hidden sm:inline">{t('chat.newChat')}</span>
+              <span className="sm:hidden">{t('chat.newChatShort')}</span>
             </Button>
           </div>
         </motion.div>
@@ -533,7 +541,7 @@ export function ChatPage() {
                     </div>
                     <div className="glass flex items-center gap-2.5 rounded-3xl rounded-tl-md px-4 py-3.5">
                       <TypingDots />
-                      <span className="text-xs text-slate-500">đang soạn câu trả lời…</span>
+                      <span className="text-xs text-slate-500">{t('chat.composing')}</span>
                     </div>
                   </motion.div>
                 )}
@@ -557,18 +565,18 @@ export function ChatPage() {
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleKeyDown}
               rows={1}
-              placeholder="Hỏi mình bất cứ điều gì về tài liệu của bạn… 💬"
+              placeholder={t('chat.inputPlaceholder')}
               className="no-scrollbar max-h-32 min-h-[2.75rem] flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none"
             />
             <div className="flex items-center gap-2 pb-0.5 pr-0.5">
               <span className="hidden items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-400 sm:flex">
-                <CornerDownLeft className="h-3 w-3" /> gửi
+                <CornerDownLeft className="h-3 w-3" /> {t('chat.sendHint')}
               </span>
               <Button
                 type="submit"
                 size="icon"
                 disabled={!draft.trim() || typing}
-                aria-label="Gửi tin nhắn"
+                aria-label={t('chat.sendMessage')}
                 className="shrink-0"
               >
                 <Send className="h-4.5 w-4.5" />
@@ -576,7 +584,7 @@ export function ChatPage() {
             </div>
           </div>
           <p className="mt-2 px-1 text-center text-[10px] text-slate-400">
-            CloudMind AI có thể sai sót — luôn kiểm chứng với nguồn được trích dẫn nha ✨
+            {t('chat.disclaimer')}
           </p>
         </motion.form>
       </div>

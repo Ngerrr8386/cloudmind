@@ -59,6 +59,7 @@ import {
   hoverLift,
 } from '@/lib/motion'
 import { useAppContext } from '@/lib/hooks'
+import { useT, type TranslationKey } from '@/lib/i18n'
 import { tone, type Tone } from '@/lib/theme'
 
 /* ------------------------------------------------------------------ */
@@ -116,15 +117,15 @@ const storageTypeColor: Record<string, string> = {
   audio: '#059669',
   code: '#f59e0b',
 }
-const storageTypeLabel: Record<string, string> = {
-  pdf: 'Tài liệu',
-  doc: 'Tài liệu',
-  sheet: 'Tài liệu',
-  slide: 'Tài liệu',
-  image: 'Ảnh & Video',
-  video: 'Ảnh & Video',
-  audio: 'Âm thanh',
-  code: 'Code & Khác',
+const storageTypeLabel: Record<string, TranslationKey> = {
+  pdf: 'dashboard.storageType.docs',
+  doc: 'dashboard.storageType.docs',
+  sheet: 'dashboard.storageType.docs',
+  slide: 'dashboard.storageType.docs',
+  image: 'dashboard.storageType.media',
+  video: 'dashboard.storageType.media',
+  audio: 'dashboard.storageType.audio',
+  code: 'dashboard.storageType.code',
 }
 
 /* Custom light tooltip for recharts ----------------------------------- */
@@ -149,6 +150,7 @@ function AIPromptBar({
   onAsk: (prompt?: string) => void
   suggestedPrompts: string[]
 }) {
+  const t = useT()
   return (
     <motion.div variants={fadeUpLg} initial="hidden" animate="show" className="mb-7">
       <GlassCard
@@ -182,7 +184,7 @@ function AIPromptBar({
                 </span>
               </span>
               <span className="mt-1 block truncate text-sm text-slate-500 sm:text-base">
-                Hỏi bất cứ điều gì về tài liệu của bạn...
+                {t('dashboard.aiPromptPlaceholder')}
               </span>
             </span>
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl bg-slate-100 transition-colors group-hover:bg-slate-200">
@@ -233,6 +235,7 @@ function StorageCard({
   plan: string
   storageBreakdown: StorageSlice[]
 }) {
+  const t = useT()
   const usedGB = (storageUsed / 1024 ** 3).toFixed(1)
   const totalGB = (storageTotal / 1024 ** 3).toFixed(0)
 
@@ -241,9 +244,9 @@ function StorageCard({
       <GlassCard className="p-5">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-base font-bold text-slate-900">Dung lượng</h3>
+            <h3 className="text-base font-bold text-slate-900">{t('sidebar.storage')}</h3>
             <p className="mt-0.5 text-xs text-slate-400">
-              {usedGB} GB / {totalGB} GB đã dùng
+              {t('dashboard.storageUsed', { used: usedGB, total: totalGB })}
             </p>
           </div>
           <Badge tone="brand">{plan}</Badge>
@@ -279,7 +282,7 @@ function StorageCard({
           <div className="pointer-events-none absolute inset-0 grid place-items-center">
             <div className="text-center">
               <p className="text-2xl font-extrabold tracking-tight text-slate-900">{storagePct}%</p>
-              <p className="text-[11px] text-slate-400">đã dùng</p>
+              <p className="text-[11px] text-slate-400">{t('dashboard.used')}</p>
             </div>
           </div>
         </div>
@@ -303,8 +306,7 @@ function StorageCard({
         <div className="mt-4">
           <ProgressBar progress={storagePct} gradient="from-grape-500 to-candy-500" />
           <p className="mt-2 text-[11px] text-slate-400">
-            Còn {formatBytes(Math.max(storageTotal - storageUsed, 0), 0)} trống.
-            Nâng cấp để có thêm không gian nhé 💜
+            {t('dashboard.storageFree', { free: formatBytes(Math.max(storageTotal - storageUsed, 0), 0) })}
           </p>
         </div>
       </GlassCard>
@@ -317,11 +319,12 @@ function StorageCard({
 /* ------------------------------------------------------------------ */
 
 function ActivityCard({ activity }: { activity: ActivityItem[] }) {
+  const t = useT()
   return (
     <motion.div variants={fadeUp}>
       <GlassCard className="p-5">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-base font-bold text-slate-900">Hoạt động</h3>
+          <h3 className="text-base font-bold text-slate-900">{t('dashboard.activity')}</h3>
           <Badge tone="mint" dot>
             Live
           </Badge>
@@ -337,7 +340,7 @@ function ActivityCard({ activity }: { activity: ActivityItem[] }) {
           <span className="absolute left-[18px] top-2 bottom-2 w-px bg-slate-200" />
           {activity.length === 0 && (
             <p className="py-6 text-center text-sm text-slate-400">
-              Chưa có hoạt động nào — bắt đầu tải tài liệu lên nhé! ✨
+              {t('dashboard.noActivity')}
             </p>
           )}
           <ul className="space-y-1">
@@ -381,6 +384,7 @@ function ActivityCard({ activity }: { activity: ActivityItem[] }) {
 /* ------------------------------------------------------------------ */
 
 function WeeklyActivityCard({ uploadActivity }: { uploadActivity: UploadPoint[] }) {
+  const t = useT()
   const totalUploads = uploadActivity.reduce((acc, d) => acc + d.files, 0)
   const totalAI = uploadActivity.reduce((acc, d) => acc + d.ai, 0)
 
@@ -389,20 +393,20 @@ function WeeklyActivityCard({ uploadActivity }: { uploadActivity: UploadPoint[] 
       <GlassCard className="p-5">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-base font-bold text-slate-900">Nhịp hoạt động tuần này 📈</h3>
+            <h3 className="text-base font-bold text-slate-900">{t('dashboard.weeklyTitle')}</h3>
             <p className="mt-0.5 text-xs text-slate-400">
-              File tải lên và lượt xử lý AI theo ngày
+              {t('dashboard.weeklyDesc')}
             </p>
           </div>
           <div className="flex items-center gap-4 text-xs">
             <span className="flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-ink-400" />
-              <span className="text-slate-600">Tải lên</span>
+              <span className="text-slate-600">{t('dashboard.uploads')}</span>
               <span className="font-bold tabular-nums text-slate-800">{totalUploads}</span>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-candy-400" />
-              <span className="text-slate-600">AI xử lý</span>
+              <span className="text-slate-600">{t('dashboard.aiProcessed')}</span>
               <span className="font-bold tabular-nums text-slate-800">{totalAI}</span>
             </span>
           </div>
@@ -445,7 +449,7 @@ function WeeklyActivityCard({ uploadActivity }: { uploadActivity: UploadPoint[] 
               <Area
                 type="monotone"
                 dataKey="files"
-                name="Tải lên"
+                name={t('dashboard.uploads')}
                 stroke="#4f46e5"
                 strokeWidth={2.5}
                 fill="url(#gradFiles)"
@@ -453,7 +457,7 @@ function WeeklyActivityCard({ uploadActivity }: { uploadActivity: UploadPoint[] 
               <Area
                 type="monotone"
                 dataKey="ai"
-                name="AI xử lý"
+                name={t('dashboard.aiProcessed')}
                 stroke="#e11d48"
                 strokeWidth={2.5}
                 fill="url(#gradAI)"
@@ -471,6 +475,7 @@ function WeeklyActivityCard({ uploadActivity }: { uploadActivity: UploadPoint[] 
 /* ------------------------------------------------------------------ */
 
 function InsightTeaser({ insight }: { insight: Insight }) {
+  const t = useT()
   const Icon = insightIconMap[insight.icon] ?? Sparkles
   const up = insight.trend >= 0
   return (
@@ -505,7 +510,7 @@ function InsightTeaser({ insight }: { insight: Insight }) {
           <h4 className="mt-4 text-sm font-bold leading-snug text-slate-900">{insight.title}</h4>
           <p className="mt-1.5 line-clamp-2 text-xs text-slate-500">{insight.description}</p>
           <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-grape-600">
-            Khám phá <ChevronRight className="h-3.5 w-3.5" />
+            {t('dashboard.explore')} <ChevronRight className="h-3.5 w-3.5" />
           </span>
         </GlassCard>
       </Link>
@@ -521,6 +526,7 @@ export function DashboardPage() {
   const { openUpload } = useAppContext()
   const { user } = useAuth()
   const navigate = useNavigate()
+  const t = useT()
 
   const userName = user?.name ?? ''
 
@@ -586,7 +592,7 @@ export function DashboardPage() {
   )
 
   const storageBreakdown: StorageSlice[] = (data?.breakdown ?? []).map((b: any) => ({
-    name: storageTypeLabel[b.type] ?? 'Khác',
+    name: t(storageTypeLabel[b.type] ?? 'dashboard.storageType.other'),
     value: Number((b.size / 1024 ** 3).toFixed(1)),
     color: storageTypeColor[b.type] ?? '#f59e0b',
   }))
@@ -631,18 +637,18 @@ export function DashboardPage() {
       <PageHeader
         eyebrow={
           <Badge tone="ai">
-            <Sparkles className="h-3 w-3" /> Bảng điều khiển
+            <Sparkles className="h-3 w-3" /> {t('dashboard.eyebrow')}
           </Badge>
         }
-        title={`Chào buổi sáng, ${userName} 👋`}
-        subtitle="AI đã tóm tắt 3 tài liệu và phát hiện 2 cụm tri thức mới qua đêm. Bắt đầu một ngày năng suất nào! ✨"
+        title={t('dashboard.greeting', { name: userName })}
+        subtitle={t('dashboard.subtitle')}
         actions={
           <>
             <Button variant="primary" onClick={openUpload}>
-              <Upload className="h-4 w-4" /> Tải lên
+              <Upload className="h-4 w-4" /> {t('topbar.upload')}
             </Button>
             <Button variant="glass" onClick={goChat}>
-              <MessageCircleHeart className="h-4 w-4" /> Hỏi AI
+              <MessageCircleHeart className="h-4 w-4" /> {t('dashboard.askAi')}
             </Button>
           </>
         }
@@ -660,7 +666,7 @@ export function DashboardPage() {
       >
         <StatCard
           icon={HardDrive}
-          label="Dung lượng đã dùng"
+          label={t('dashboard.stat.storage')}
           value={formatBytes(storageUsed, 0)}
           suffix={`/ ${formatBytes(storageTotal, 0)}`}
           trend={9}
@@ -668,23 +674,23 @@ export function DashboardPage() {
         />
         <StatCard
           icon={Files}
-          label="Tổng tài liệu"
+          label={t('dashboard.stat.files')}
           value={formatNumber(totalFiles)}
           trend={14}
           tone="blue"
         />
         <StatCard
           icon={Sparkles}
-          label="Lượt AI tuần này"
+          label={t('dashboard.stat.ai')}
           value={formatNumber(aiInteractions)}
           trend={32}
           tone="emerald"
         />
         <StatCard
           icon={Brain}
-          label="Tri thức khám phá"
+          label={t('dashboard.stat.knowledge')}
           value={formatNumber(knowledgeClustersCount)}
-          suffix="cụm"
+          suffix={t('dashboard.stat.clusters')}
           trend={12}
           tone="amber"
         />
@@ -697,17 +703,17 @@ export function DashboardPage() {
           {/* Recent files */}
           <motion.div variants={sectionFade} initial="hidden" animate="show">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900">Tài liệu gần đây</h2>
+              <h2 className="text-lg font-bold text-slate-900">{t('dashboard.recentFiles')}</h2>
               <Link
                 to="/app/files"
                 className="inline-flex items-center gap-1 text-sm font-semibold text-grape-600 transition-colors hover:text-grape-500"
               >
-                Xem tất cả <ArrowUpRight className="h-4 w-4" />
+                {t('dashboard.viewAll')} <ArrowUpRight className="h-4 w-4" />
               </Link>
             </div>
             {recentFiles.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-400">
-                Chưa có tài liệu nào — hãy tải lên! 📄
+                {t('dashboard.noFiles')}
               </p>
             ) : (
               <motion.div
@@ -730,17 +736,17 @@ export function DashboardPage() {
           {/* Folders quick access */}
           <motion.div variants={sectionFade} initial="hidden" animate="show">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900">Thư mục</h2>
+              <h2 className="text-lg font-bold text-slate-900">{t('dashboard.folders')}</h2>
               <Link
                 to="/app/files"
                 className="inline-flex items-center gap-1 text-sm font-semibold text-grape-600 transition-colors hover:text-grape-500"
               >
-                Quản lý <ArrowUpRight className="h-4 w-4" />
+                {t('dashboard.manage')} <ArrowUpRight className="h-4 w-4" />
               </Link>
             </div>
             {folders.length === 0 ? (
               <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-400">
-                Chưa có thư mục nào — tạo thư mục đầu tiên nhé! 📁
+                {t('dashboard.noFolders')}
               </p>
             ) : (
             <motion.div
@@ -771,7 +777,7 @@ export function DashboardPage() {
                       {folder.name}
                     </span>
                     <span className="block text-xs text-slate-400">
-                      {folder.fileCount} mục · {formatBytes(folder.size, 0)}
+                      {t('dashboard.folderItems', { count: folder.fileCount, size: formatBytes(folder.size, 0) })}
                     </span>
                   </span>
                 </motion.button>
@@ -808,13 +814,13 @@ export function DashboardPage() {
       <div className="mt-8">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
-            <Brain className="h-5 w-5 text-grape-600" /> Insights cho bạn
+            <Brain className="h-5 w-5 text-grape-600" /> {t('dashboard.insightsTitle')}
           </h2>
           <Link
             to="/app/insights"
             className="inline-flex items-center gap-1 text-sm font-semibold text-grape-600 transition-colors hover:text-grape-500"
           >
-            Tất cả insights <ArrowUpRight className="h-4 w-4" />
+            {t('dashboard.allInsights')} <ArrowUpRight className="h-4 w-4" />
           </Link>
         </div>
         <motion.div

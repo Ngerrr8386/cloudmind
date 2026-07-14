@@ -1,34 +1,36 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Star, MoreHorizontal, Users, Sparkles, Download, Share2, Trash2, Loader2, AlertTriangle } from 'lucide-react'
-import { GlassCard, FileTypeIcon, fileTint, fileTypeLabel, Badge } from '@/components/ui'
+import { Star, MoreHorizontal, Users, Sparkles, Download, Share2, Trash2, RotateCcw, Loader2, AlertTriangle } from 'lucide-react'
+import { GlassCard, FileTypeIcon, fileTint, useFileTypeLabel, Badge } from '@/components/ui'
 import type { StoredFile } from '@/lib/types'
 import { formatBytes, timeAgo, cn } from '@/lib/utils'
 import { tone as toneClasses } from '@/lib/theme'
 import { fadeUp } from '@/lib/motion'
+import { useT } from '@/lib/i18n'
 
 /** Trạng thái lập chỉ mục AI (embedding). Fallback aiProcessed cho file cũ. */
 function EmbedBadge({ file, compact = false }: { file: StoredFile; compact?: boolean }) {
+  const t = useT()
   const s = file.embedStatus ?? (file.aiProcessed ? 'done' : undefined)
 
   if (s === 'pending' || s === 'processing') {
-    if (compact) return <Loader2 className="h-3 w-3 shrink-0 animate-spin text-amber-500" aria-label="AI đang xử lý" />
+    if (compact) return <Loader2 className="h-3 w-3 shrink-0 animate-spin text-amber-500" aria-label={t('file.embedProcessing')} />
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-amber-50/90 px-2 py-0.5 text-[10px] font-bold text-amber-600 backdrop-blur-sm">
-        <Loader2 className="h-2.5 w-2.5 animate-spin" /> AI đang xử lý
+        <Loader2 className="h-2.5 w-2.5 animate-spin" /> {t('file.embedProcessing')}
       </span>
     )
   }
   if (s === 'failed') {
-    if (compact) return <AlertTriangle className="h-3 w-3 shrink-0 text-rose-500" aria-label="Lỗi lập chỉ mục" />
+    if (compact) return <AlertTriangle className="h-3 w-3 shrink-0 text-rose-500" aria-label={t('file.embedError')} />
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-rose-50/90 px-2 py-0.5 text-[10px] font-bold text-rose-600 backdrop-blur-sm">
-        <AlertTriangle className="h-2.5 w-2.5" /> Lỗi index
+        <AlertTriangle className="h-2.5 w-2.5" /> {t('file.embedErrorShort')}
       </span>
     )
   }
   if (s === 'done') {
-    if (compact) return <Sparkles className="h-3 w-3 shrink-0 text-ink-400" aria-label="Đã lập chỉ mục" />
+    if (compact) return <Sparkles className="h-3 w-3 shrink-0 text-ink-400" aria-label={t('file.embedDone')} />
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-bold text-ink-600 backdrop-blur-sm">
         <Sparkles className="h-2.5 w-2.5" /> AI
@@ -43,10 +45,13 @@ export interface FileActions {
   onDownload?: () => void
   onShare?: () => void
   onTrash?: () => void
+  /** Khôi phục file từ thùng rác (chỉ dùng ở chế độ xem thùng rác). */
+  onRestore?: () => void
 }
 
 /** Menu thao tác 3 chấm (dùng chung cho card & row). */
-function FileMenu({ file, onStar, onDownload, onShare, onTrash }: { file: StoredFile } & FileActions) {
+function FileMenu({ file, onStar, onDownload, onShare, onTrash, onRestore }: { file: StoredFile } & FileActions) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -57,10 +62,11 @@ function FileMenu({ file, onStar, onDownload, onShare, onTrash }: { file: Stored
   }, [open])
 
   const items = [
-    onStar && { icon: Star, label: file.starred ? 'Bỏ đánh dấu' : 'Đánh dấu sao', fn: onStar },
-    onDownload && { icon: Download, label: 'Tải xuống', fn: onDownload },
-    onShare && { icon: Share2, label: 'Chia sẻ', fn: onShare },
-    onTrash && { icon: Trash2, label: 'Xoá', fn: onTrash, danger: true },
+    onRestore && { icon: RotateCcw, label: t('file.restore'), fn: onRestore },
+    onStar && { icon: Star, label: file.starred ? t('file.unstar') : t('file.star'), fn: onStar },
+    onDownload && { icon: Download, label: t('file.download'), fn: onDownload },
+    onShare && { icon: Share2, label: t('file.share'), fn: onShare },
+    onTrash && { icon: Trash2, label: t('file.delete'), fn: onTrash, danger: true },
   ].filter(Boolean) as { icon: typeof Star; label: string; fn: () => void; danger?: boolean }[]
 
   if (!items.length) return <MoreHorizontal className="h-4 w-4 text-slate-300" />
@@ -73,7 +79,7 @@ function FileMenu({ file, onStar, onDownload, onShare, onTrash }: { file: Stored
           'grid h-7 w-7 place-items-center rounded-lg text-slate-400 opacity-0 transition-all hover:bg-slate-100 hover:text-slate-700 group-hover:opacity-100',
           open && 'opacity-100',
         )}
-        aria-label="Tùy chọn"
+        aria-label={t('file.options')}
       >
         <MoreHorizontal className="h-4 w-4" />
       </button>
@@ -98,6 +104,7 @@ function FileMenu({ file, onStar, onDownload, onShare, onTrash }: { file: Stored
 /** Grid file card. */
 export function FileCard({ file, onClick, ...actions }: { file: StoredFile; onClick?: () => void } & FileActions) {
   const t = toneClasses(file.tone)
+  const ftLabel = useFileTypeLabel()
   return (
     <motion.div variants={fadeUp}>
       <GlassCard interactive onClick={onClick} className="group overflow-hidden p-0">
@@ -107,7 +114,7 @@ export function FileCard({ file, onClick, ...actions }: { file: StoredFile; onCl
             <FileTypeIcon type={file.type} className="h-10 w-10 opacity-80" />
           </div>
           <div className="absolute left-3 top-3 flex gap-1.5">
-            <Badge tone="neutral" className="bg-white/80 backdrop-blur-sm">{fileTypeLabel[file.type]}</Badge>
+            <Badge tone="neutral" className="bg-white/80 backdrop-blur-sm">{ftLabel(file.type)}</Badge>
           </div>
           <div className="absolute right-3 top-3 flex gap-1">
             {file.starred && <span className="grid h-6 w-6 place-items-center rounded-lg bg-white/80 backdrop-blur-sm"><Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" /></span>}
@@ -138,6 +145,7 @@ export function FileCard({ file, onClick, ...actions }: { file: StoredFile; onCl
 /** List file row. */
 export function FileRow({ file, onClick, ...actions }: { file: StoredFile; onClick?: () => void } & FileActions) {
   const t = toneClasses(file.tone)
+  const ftLabel = useFileTypeLabel()
   return (
     <motion.div
       variants={fadeUp}
@@ -155,7 +163,7 @@ export function FileRow({ file, onClick, ...actions }: { file: StoredFile; onCli
           {file.starred && <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />}
           <EmbedBadge file={file} compact />
         </div>
-        <p className="truncate text-xs text-slate-400">{file.aiSummary ?? fileTypeLabel[file.type]}</p>
+        <p className="truncate text-xs text-slate-400">{file.aiSummary ?? ftLabel(file.type)}</p>
       </div>
       <div className="hidden shrink-0 items-center gap-6 text-xs text-slate-400 sm:flex">
         <span className="w-16 text-right tabular-nums">{formatBytes(file.size)}</span>

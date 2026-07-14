@@ -85,6 +85,8 @@ async function request<T = any>(
   // 401 → thử refresh 1 lần rồi gọi lại (bỏ qua request không-auth & chính /auth/refresh)
   if (res.status === 401 && !_retried && opts.auth !== false && path !== '/auth/refresh') {
     if (await refreshAccess()) return request<T>(method, path, body, opts, true)
+    // Refresh token thật sự hết hạn → dọn token để RequireAuth điều hướng về /login sạch
+    clearTokens()
   }
 
   const json = await res.json().catch(() => ({}))
@@ -126,7 +128,14 @@ export const api = {
   updateAiSettings: (b: Record<string, unknown>) => patch('/me/settings/ai', b),
   updateAppearance: (b: Record<string, unknown>) => patch('/me/settings/appearance', b),
   listSessions: () => get('/me/sessions'),
+  revokeSession: (id: string) => del(`/me/sessions/${id}`),
   toggle2fa: (enabled: boolean) => post('/me/2fa', { enabled }),
+  uploadAvatar: (file: File) => {
+    const form = new FormData()
+    form.append('avatar', file)
+    return post('/me/avatar', form)
+  },
+  deleteAccount: () => del('/me/account'),
 
   // ---------- Dashboard ----------
   dashboardStats: () => get('/dashboard/stats'),
@@ -141,10 +150,13 @@ export const api = {
 
   // ---------- Thư mục ----------
   folders: () => get('/folders'),
+  trashedFolders: () => get('/folders?trashed=true'),
   folderTree: () => get('/folders/tree'),
   createFolder: (b: { name: string; icon?: string; tone?: string; parentId?: string | null }) => post('/folders', b),
   updateFolder: (id: string, b: Record<string, unknown>) => patch(`/folders/${id}`, b),
-  deleteFolder: (id: string) => del(`/folders/${id}`),
+  deleteFolder: (id: string) => del(`/folders/${id}`), // xoá mềm → thùng rác
+  restoreFolder: (id: string) => post(`/folders/${id}/restore`, {}),
+  permanentDeleteFolder: (id: string) => del(`/folders/${id}/permanent`),
 
   // ---------- Tệp tin ----------
   files: (params: Record<string, unknown> = {}) =>
@@ -154,10 +166,16 @@ export const api = {
   patchFile: (id: string, b: Record<string, unknown>) => patch(`/files/${id}`, b),
   starFile: (id: string) => post(`/files/${id}/star`, {}),
   shareFile: (id: string, b: { permission?: string; expiresInDays?: number }) => post(`/files/${id}/share`, b),
+  fileShares: (id: string) => get(`/files/${id}/shares`),
+  revokeFileShare: (id: string, shareId: string) => del(`/files/${id}/share/${shareId}`),
   trashFile: (id: string) => del(`/files/${id}`),
   restoreFile: (id: string) => post(`/files/${id}/restore`, {}),
   permanentDelete: (id: string) => del(`/files/${id}/permanent`),
   bulkFiles: (b: { ids: string[]; action: string; folderId?: string | null }) => post('/files/bulk', b),
+
+  // ---------- Chia sẻ công khai (không cần đăng nhập) ----------
+  getShare: (token: string) => get(`/shares/${token}`),
+  shareDownloadUrl: (token: string) => get(`/shares/${token}/download`),
 
   /** Upload qua Firebase signed URL: tạo URL → PUT → confirm. */
   uploadFile: (file: File, folderId?: string | null) => {
@@ -189,10 +207,42 @@ export const api = {
   plans: () => get('/plans', { auth: false }),
   subscription: () => get('/subscription'),
   checkout: (b: { planKey: string; seats?: number; months?: number }) => post('/subscription/checkout', b),
+  // Ép đồng bộ trạng thái đơn từ PayOS → kích hoạt gói ngay khi quay về (không chờ webhook)
+  syncOrder: (orderCode: string | number) => post(`/subscription/sync/${orderCode}`, {}),
   cancelSubscription: () => post('/subscription/cancel', {}),
   invoices: () => get('/billing/invoices'),
 
   // ---------- Workspace ----------
   currentWorkspace: () => get('/workspaces/current'),
+  createWorkspace: (b: { name?: string } = {}) => post('/workspaces', b),
+  updateWorkspace: (b: { name?: string; slug?: string; logoUrl?: string }) => patch('/workspaces/current', b),
+  transferWorkspace: (memberId: string) => post('/workspaces/current/transfer', { memberId }),
+  deleteWorkspace: () => del('/workspaces/current'),
+
+  // Thành viên
   workspaceMembers: () => get('/workspaces/current/members'),
+  updateMemberRole: (memberId: string, role: 'wsadmin' | 'member') => patch(`/workspaces/current/members/${memberId}/role`, { role }),
+  removeMember: (memberId: string) => del(`/workspaces/current/members/${memberId}`),
+  leaveWorkspace: () => post('/workspaces/current/leave', {}),
+
+  // Lời mời
+  workspaceInvites: () => get('/workspaces/current/invites'),
+  createInvite: (b: { email: string; wsRole?: 'wsadmin' | 'member' }) => post('/workspaces/current/invites', b),
+  resendInvite: (id: string) => post(`/workspaces/current/invites/${id}/resend`, {}),
+  revokeInvite: (id: string) => del(`/workspaces/current/invites/${id}`),
+
+  // Seat / Chia sẻ / Hoạt động
+  workspaceSeats: () => get('/workspaces/current/seats'),
+  setWorkspaceSeats: (seats: number) => post('/workspaces/current/seats', { seats }),
+  workspaceShared: () => get('/workspaces/current/shared'),
+  attachFolderToWorkspace: (folderId: string) => post(`/workspaces/current/folders/${folderId}/attach`, {}),
+  detachFolderFromWorkspace: (folderId: string) => post(`/workspaces/current/folders/${folderId}/detach`, {}),
+  setFolderPermissions: (folderId: string, permissions: { user: string; access: 'view' | 'edit' }[]) =>
+    patch(`/workspaces/current/folders/${folderId}/permissions`, { permissions }),
+  workspaceActivity: () => get('/workspaces/current/activity'),
+
+  // Lời mời theo token (trang /invite/:token)
+  invite: (token: string) => get(`/invites/${token}`, { auth: false }),
+  acceptInvite: (token: string) => post(`/invites/${token}/accept`, {}),
+  declineInvite: (token: string) => post(`/invites/${token}/decline`, {}),
 }

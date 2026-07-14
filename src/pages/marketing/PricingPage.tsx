@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -9,6 +9,7 @@ import {
   Rocket,
   Zap,
   ShieldCheck,
+  Users,
   GraduationCap,
   ChevronDown,
   ArrowRight,
@@ -28,8 +29,10 @@ import { pricingPlans, faqs } from '@/lib/mockData'
 import type { PricingPlan } from '@/lib/types'
 import { useAuth } from '@/lib/auth'
 import { api, ApiError } from '@/lib/api'
+import { useAsync } from '@/lib/useApi'
 import { cn, formatNumber } from '@/lib/utils'
 import { tone } from '@/lib/theme'
+import { useT, type TranslationKey } from '@/lib/i18n'
 import {
   staggerContainer,
   fadeUp,
@@ -50,31 +53,137 @@ const planIcon: Record<string, typeof Zap> = {
   team: Rocket,
 }
 
+/**
+ * Bảng tra khoá dịch theo ID gói ổn định (free/pro/team). Dữ liệu gói (tên,
+ * tagline, cta, badge, feature) đến từ `mockData` — không sửa được ở đây — nên
+ * ta ánh xạ ID → TranslationKey rồi giải mã bằng t() lúc render (mẫu SearchPage).
+ * plan.name giữ nguyên (Free/Pro/Team là tên thương hiệu, không phải tiếng Việt).
+ */
+const PLAN_TAGLINE_KEYS: Record<string, TranslationKey> = {
+  free: 'pricing.planFreeTagline',
+  pro: 'pricing.planProTagline',
+  team: 'pricing.planTeamTagline',
+}
+
+const PLAN_CTA_KEYS: Record<string, TranslationKey> = {
+  free: 'pricing.planFreeCta',
+  pro: 'pricing.planProCta',
+  team: 'pricing.planTeamCta',
+}
+
+// plan.badge (dữ liệu) đóng vai trò cờ logic "có hiện badge không"; chữ hiển thị
+// tra theo ID gói. Chỉ gói team hiện badge (pro luôn ở dạng highlight).
+const PLAN_BADGE_KEYS: Record<string, TranslationKey> = {
+  team: 'pricing.badgeNew',
+}
+
+// Feature bullets đến từ mockData theo thứ tự cố định; giải mã theo ID gói + index.
+const PLAN_FEATURE_KEYS: Record<string, TranslationKey[]> = {
+  free: [
+    'pricing.featStorage15',
+    'pricing.featSearchBasic',
+    'pricing.featAi20',
+    'pricing.featSummary',
+    'pricing.featSmartFolders',
+    'pricing.featKnowledgeMining',
+  ],
+  pro: [
+    'pricing.featStorage500',
+    'pricing.featSearchAdvanced',
+    'pricing.featAiUnlimited',
+    'pricing.featAutoSummary',
+    'pricing.featSmartFolders',
+    'pricing.featKnowledgeMining',
+  ],
+  team: [
+    'pricing.featStorage2tb',
+    'pricing.featAllPro',
+    'pricing.featSharedWorkspace',
+    'pricing.featRolesAudit',
+    'pricing.featKnowledgeMining',
+    'pricing.featPrioritySupport',
+  ],
+}
+
+// FAQ Q/A đến từ mockData theo thứ tự cố định; giải mã theo index.
+const FAQ_KEYS: [TranslationKey, TranslationKey][] = [
+  ['pricing.faq1Q', 'pricing.faq1A'],
+  ['pricing.faq2Q', 'pricing.faq2A'],
+  ['pricing.faq3Q', 'pricing.faq3A'],
+  ['pricing.faq4Q', 'pricing.faq4A'],
+  ['pricing.faq5Q', 'pricing.faq5A'],
+]
+
 function priceLabel(plan: PricingPlan, yearly: boolean) {
   const value = yearly ? plan.priceYearly : plan.priceMonthly
-  if (value === 0) return 'Miễn phí'
   return `${formatNumber(value)}đ`
+}
+
+/* ------------------------------------------------------------------ */
+/* merge mock template (giao diện) với giá/dung lượng thật từ API     */
+/* ------------------------------------------------------------------ */
+
+/** Gói thật trả về từ api.plans(). */
+interface ApiPlan {
+  key: string
+  priceMonthly: number // VND/tháng
+  priceYearly: number // TỔNG VND/năm
+  storageBytes: number
+  pricingModel?: string
+  includedSeats?: number
+}
+
+const TB = 1024 ** 4
+const GB = 1024 ** 3
+
+/** Định dạng dung lượng từ byte: >=1TB → "x TB", ngược lại → "x GB". */
+function formatStorage(bytes: number): string {
+  if (bytes >= TB) return `${Math.round(bytes / TB)} TB`
+  return `${Math.round(bytes / GB)} GB`
+}
+
+/**
+ * Lấy template mock làm cơ sở trình bày (tone, badge, cta, highlight,
+ * features so sánh) rồi GHI ĐÈ giá + dung lượng thật từ API theo `key`.
+ * Không tìm thấy gói API tương ứng → giữ nguyên template (fallback).
+ */
+function mergePlans(templates: PricingPlan[], apiPlans: ApiPlan[] | null): PricingPlan[] {
+  if (!apiPlans?.length) return templates
+  return templates.map((tpl) => {
+    const real = apiPlans.find((p) => p.key === tpl.id)
+    if (!real) return tpl
+    return {
+      ...tpl,
+      priceMonthly: real.priceMonthly,
+      priceYearly: Math.round(real.priceYearly / 12),
+      storage: formatStorage(real.storageBytes),
+      pricingModel: real.pricingModel,
+      includedSeats: real.includedSeats,
+    }
+  })
 }
 
 /* ------------------------------------------------------------------ */
 /* feature comparison matrix                                          */
 /* ------------------------------------------------------------------ */
 
-type Cell = boolean | string
+// Ô chuỗi lưu TranslationKey (không phải chữ hiển thị) → giải mã bằng t() trong CompCell.
+type Cell = boolean | TranslationKey
 
-const comparisonRows: { label: string; cells: [Cell, Cell, Cell] }[] = [
-  { label: 'Dung lượng lưu trữ', cells: ['15 GB', '500 GB', '2 TB / người'] },
-  { label: 'Tìm kiếm ngữ nghĩa', cells: ['Cơ bản', 'Nâng cao', 'Nâng cao'] },
-  { label: 'Hỏi đáp AI', cells: ['20 / tháng', 'Không giới hạn', 'Không giới hạn'] },
-  { label: 'Tóm tắt & trích xuất tự động', cells: [false, true, true] },
-  { label: 'Gợi ý thư mục thông minh', cells: [false, true, true] },
-  { label: 'Khai thác tri thức nâng cao', cells: [false, false, true] },
-  { label: 'Không gian làm việc chung', cells: [false, false, true] },
-  { label: 'Phân quyền & nhật ký', cells: [false, false, true] },
-  { label: 'Hỗ trợ ưu tiên 24/7', cells: [false, 'Email', true] },
+const comparisonRows: { label: TranslationKey; cells: [Cell, Cell, Cell] }[] = [
+  { label: 'pricing.compRowStorage', cells: ['pricing.compStorageFree', 'pricing.compStoragePro', 'pricing.compStorageTeam'] },
+  { label: 'pricing.compRowSearch', cells: ['pricing.compSearchBasic', 'pricing.compSearchAdvanced', 'pricing.compSearchAdvanced'] },
+  { label: 'pricing.compRowAiqa', cells: ['pricing.compAi20', 'pricing.compUnlimited', 'pricing.compUnlimited'] },
+  { label: 'pricing.compRowAutoSummary', cells: [false, true, true] },
+  { label: 'pricing.compRowSmartFolders', cells: [false, true, true] },
+  { label: 'pricing.compRowKnowledge', cells: [false, false, true] },
+  { label: 'pricing.compRowWorkspace', cells: [false, false, true] },
+  { label: 'pricing.compRowRoles', cells: [false, false, true] },
+  { label: 'pricing.compRowSupport', cells: [false, 'pricing.compSupportEmail', true] },
 ]
 
 function CompCell({ value }: { value: Cell }) {
+  const t = useT()
   if (value === true) {
     return (
       <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-mint-500/15 text-mint-400">
@@ -89,7 +198,7 @@ function CompCell({ value }: { value: Cell }) {
       </span>
     )
   }
-  return <span className="text-sm font-medium text-slate-700">{value}</span>
+  return <span className="text-sm font-medium text-slate-700">{t(value)}</span>
 }
 
 /* ------------------------------------------------------------------ */
@@ -164,6 +273,7 @@ function PlanCard({
   yearly: boolean
   onPick: () => void
 }) {
+  const t = useT()
   const Icon = planIcon[plan.id] ?? Zap
   const isFree = plan.priceMonthly === 0
 
@@ -177,7 +287,7 @@ function PlanCard({
       {plan.highlight && (
         <div className="pointer-events-none absolute -right-px -top-px overflow-hidden rounded-bl-2xl rounded-tr-3xl">
           <div className="bg-gradient-brand px-4 py-1.5 text-xs font-bold text-white shadow-glow">
-            Phổ biến nhất ✨
+            {t('pricing.mostPopularStar')}
           </div>
         </div>
       )}
@@ -194,12 +304,15 @@ function PlanCard({
         </span>
         <div>
           <div className="flex items-center gap-2">
+            {/* plan.name (Free/Pro/Team) là tên thương hiệu — giữ nguyên */}
             <h3 className="text-xl font-extrabold text-slate-900">{plan.name}</h3>
-            {plan.badge && !plan.highlight && (
-              <Badge tone="mint">{plan.badge}</Badge>
+            {plan.badge && !plan.highlight && PLAN_BADGE_KEYS[plan.id] && (
+              <Badge tone="mint">{t(PLAN_BADGE_KEYS[plan.id])}</Badge>
             )}
           </div>
-          <p className="text-sm text-slate-500">{plan.tagline}</p>
+          <p className="text-sm text-slate-500">
+            {PLAN_TAGLINE_KEYS[plan.id] ? t(PLAN_TAGLINE_KEYS[plan.id]) : plan.tagline}
+          </p>
         </div>
       </div>
 
@@ -216,48 +329,60 @@ function PlanCard({
               plan.highlight ? 'text-gradient' : 'text-slate-900',
             )}
           >
-            {priceLabel(plan, yearly)}
+            {isFree ? t('pricing.priceFree') : priceLabel(plan, yearly)}
           </motion.span>
           {!isFree && (
-            <span className="mb-1.5 text-sm font-medium text-slate-500">/tháng</span>
+            <span className="mb-1.5 text-sm font-medium text-slate-500">{t('pricing.perMonth')}</span>
           )}
         </div>
         <p className="mt-1 text-xs text-slate-500">
           {isFree
-            ? 'Không cần thẻ, cứ vào dùng thôi 😎'
+            ? t('pricing.captionFree')
             : yearly
-              ? 'Thanh toán theo năm · đã gồm ưu đãi'
-              : 'Thanh toán hàng tháng · hủy bất cứ lúc nào'}
+              ? t('pricing.captionYearly')
+              : t('pricing.captionMonthly')}
         </p>
-        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700">
-          <ShieldCheck className="h-4 w-4 text-mint-400" />
-          {plan.storage}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-700">
+            <ShieldCheck className="h-4 w-4 text-mint-400" />
+            {plan.storage}
+          </span>
+          {plan.pricingModel === 'per_seat' && plan.includedSeats ? (
+            <span className="inline-flex items-center gap-2 rounded-full bg-grape-50 px-3 py-1.5 text-sm font-semibold text-grape-700">
+              <Users className="h-4 w-4 text-grape-500" />
+              {t('pricing.includedSeats', { count: plan.includedSeats })}
+            </span>
+          ) : null}
         </div>
       </div>
 
       {/* features */}
       <ul className="flex-1 space-y-3">
-        {plan.features.map((f) => (
-          <li key={f.text} className="flex items-start gap-3 text-sm">
-            <span
-              className={cn(
-                'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
-                f.included
-                  ? 'bg-mint-500/15 text-mint-400'
-                  : 'bg-slate-100 text-slate-300',
-              )}
-            >
-              {f.included ? (
-                <Check className="h-3.5 w-3.5" strokeWidth={3} />
-              ) : (
-                <Minus className="h-3.5 w-3.5" />
-              )}
-            </span>
-            <span className={cn(f.included ? 'text-slate-700' : 'text-slate-400')}>
-              {f.text}
-            </span>
-          </li>
-        ))}
+        {plan.features.map((f, i) => {
+          // f.included giữ vai trò dữ liệu/logic; chữ hiển thị tra theo ID gói + index.
+          const featKey = PLAN_FEATURE_KEYS[plan.id]?.[i]
+          return (
+            <li key={featKey ?? f.text} className="flex items-start gap-3 text-sm">
+              <span
+                className={cn(
+                  'mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full',
+                  f.included
+                    ? 'bg-mint-500/15 text-mint-400'
+                    : 'bg-slate-100 text-slate-300',
+                )}
+              >
+                {f.included ? (
+                  <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                ) : (
+                  <Minus className="h-3.5 w-3.5" />
+                )}
+              </span>
+              <span className={cn(f.included ? 'text-slate-700' : 'text-slate-400')}>
+                {featKey ? t(featKey) : f.text}
+              </span>
+            </li>
+          )
+        })}
       </ul>
 
       {/* cta */}
@@ -269,7 +394,7 @@ function PlanCard({
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
       >
-        {plan.cta}
+        {PLAN_CTA_KEYS[plan.id] ? t(PLAN_CTA_KEYS[plan.id]) : plan.cta}
         <ArrowRight className="ml-1.5 h-4 w-4" />
       </Button>
     </div>
@@ -306,10 +431,15 @@ function PlanCard({
 /* ------------------------------------------------------------------ */
 
 export function PricingPage() {
+  const t = useT()
   const navigate = useNavigate()
   const { user } = useAuth()
   const [yearly, setYearly] = useState(true)
   const [toast, setToast] = useState('')
+
+  // Giá + dung lượng thật từ DB; lỗi/đang load → fallback template mock.
+  const { data: apiPlans } = useAsync<ApiPlan[]>(() => api.plans(), [])
+  const plans = useMemo(() => mergePlans(pricingPlans, apiPlans), [apiPlans])
 
   const goApp = () => navigate(user ? '/app' : '/signup')
 
@@ -318,12 +448,12 @@ export function PricingPage() {
     if (plan.priceMonthly === 0) { navigate(user ? '/app' : '/signup'); return }
     if (!user) { navigate('/login'); return }
     try {
-      setToast('Đang tạo phiên thanh toán…')
+      setToast(t('pricing.checkoutCreating'))
       const res = await api.checkout({ planKey: plan.id, months: yearly ? 12 : 1 })
       if (res.checkoutUrl) { window.location.href = res.checkoutUrl; return }
       setToast('')
     } catch (e) {
-      setToast(e instanceof ApiError ? e.message : 'Không tạo được phiên thanh toán')
+      setToast(e instanceof ApiError ? e.message : t('pricing.checkoutFailed'))
       window.setTimeout(() => setToast(''), 4000)
     }
   }
@@ -344,7 +474,7 @@ export function PricingPage() {
         >
           <motion.div variants={popIn} className="flex justify-center">
             <Badge tone="ai" dot>
-              Bảng giá
+              {t('nav.pricing')}
             </Badge>
           </motion.div>
 
@@ -352,16 +482,15 @@ export function PricingPage() {
             variants={fadeUp}
             className="mt-5 text-4xl font-black leading-[1.05] tracking-tight text-slate-900 sm:text-5xl md:text-6xl"
           >
-            Chọn gói hợp với{' '}
-            <span className="text-gradient">vibe của bạn</span> 💜
+            {t('pricing.heroTitlePre')}{' '}
+            <span className="text-gradient">{t('pricing.heroTitleHi')}</span> 💜
           </motion.h1>
 
           <motion.p
             variants={fadeUp}
             className="mx-auto mt-5 max-w-xl text-base text-slate-600 sm:text-lg"
           >
-            Từ học sinh tay ngang tới team làm thật — CloudMind có gói cho mọi
-            level. Nâng cấp khi cần, hạ cấp khi chill, không ràng buộc gì hết.
+            {t('pricing.heroSubtitle')}
           </motion.p>
 
           {/* billing toggle */}
@@ -377,7 +506,7 @@ export function PricingPage() {
                 !yearly ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700',
               )}
             >
-              Hàng tháng
+              {t('pricing.billingMonthly')}
             </button>
 
             <BillingToggle checked={yearly} onChange={setYearly} />
@@ -390,7 +519,7 @@ export function PricingPage() {
                 yearly ? 'text-slate-900' : 'text-slate-500 hover:text-slate-700',
               )}
             >
-              Theo năm
+              {t('pricing.billingYearly')}
               <AnimatePresence>
                 {yearly && (
                   <motion.span
@@ -399,7 +528,7 @@ export function PricingPage() {
                     exit={{ opacity: 0, scale: 0.6 }}
                     transition={spring}
                   >
-                    <Badge tone="mint">tiết kiệm ~20%</Badge>
+                    <Badge tone="mint">{t('pricing.saveBadge')}</Badge>
                   </motion.span>
                 )}
               </AnimatePresence>
@@ -414,7 +543,7 @@ export function PricingPage() {
           animate="show"
           className="relative mx-auto mt-12 grid max-w-6xl grid-cols-1 items-stretch gap-6 sm:mt-14 md:grid-cols-2 lg:grid-cols-3"
         >
-          {pricingPlans.map((plan) => (
+          {plans.map((plan) => (
             <PlanCard
               key={plan.id}
               plan={plan}
@@ -425,8 +554,7 @@ export function PricingPage() {
         </motion.div>
 
         <p className="relative mx-auto mt-6 max-w-md text-center text-xs text-slate-400">
-          Giá đã gồm VAT. Mọi gói đều có 14 ngày dùng thử Pro miễn phí, không cần
-          nhập thẻ.
+          {t('pricing.vatNote')}
         </p>
       </section>
 
@@ -453,16 +581,15 @@ export function PricingPage() {
               <div className="relative flex-1">
                 <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
                   <h2 className="text-2xl font-black text-slate-900 sm:text-3xl">
-                    Sinh viên giảm{' '}
-                    <span className="text-gradient-mint">50%</span> gói Pro 🎓
+                    {t('pricing.studentTitlePre')}{' '}
+                    <span className="text-gradient-mint">50%</span> {t('pricing.studentTitlePost')}
                   </h2>
                   <Badge tone="mint" dot>
-                    Ưu đãi hot
+                    {t('pricing.hotDeal')}
                   </Badge>
                 </div>
                 <p className="mt-2 text-sm text-slate-600 sm:text-base">
-                  Xác thực email trường trong 30 giây là có ngay full sức mạnh AI
-                  với giá nửa tiền. Học mà có não thứ hai thì còn gì bằng 💪
+                  {t('pricing.studentDesc')}
                 </p>
               </div>
 
@@ -474,7 +601,7 @@ export function PricingPage() {
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.97 }}
               >
-                Xác thực ngay
+                {t('pricing.verifyNow')}
                 <ArrowRight className="ml-1.5 h-4 w-4" />
               </Button>
             </div>
@@ -492,12 +619,12 @@ export function PricingPage() {
           className="mx-auto max-w-6xl"
         >
           <div className="mb-8 text-center">
-            <AIChip label="So kèo từng tính năng" className="mx-auto" />
+            <AIChip label={t('pricing.compareChip')} className="mx-auto" />
             <h2 className="mt-4 text-3xl font-black text-slate-900 sm:text-4xl">
-              So sánh chi tiết các gói
+              {t('pricing.compareTitle')}
             </h2>
             <p className="mt-2 text-slate-500">
-              Lướt một cái là rõ gói nào hợp với bạn nhất.
+              {t('pricing.compareSubtitle')}
             </p>
           </div>
 
@@ -509,7 +636,7 @@ export function PricingPage() {
             viewport={{ once: true }}
             className="space-y-4 md:hidden"
           >
-            {pricingPlans.map((plan, pi) => (
+            {plans.map((plan, pi) => (
               <motion.div key={plan.id} variants={fadeUp}>
                 <GlassCard className="p-5">
                   <div className="mb-4 flex items-center justify-between">
@@ -517,7 +644,7 @@ export function PricingPage() {
                       {plan.name}
                     </span>
                     {plan.highlight && (
-                      <Badge tone="brand">Phổ biến nhất</Badge>
+                      <Badge tone="brand">{t('pricing.mostPopular')}</Badge>
                     )}
                   </div>
                   <ul className="space-y-3">
@@ -527,7 +654,7 @@ export function PricingPage() {
                         className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3 last:border-0 last:pb-0"
                       >
                         <span className="text-sm text-slate-600">
-                          {row.label}
+                          {t(row.label)}
                         </span>
                         <CompCell value={row.cells[pi]} />
                       </li>
@@ -545,9 +672,9 @@ export function PricingPage() {
                 <thead>
                   <tr className="border-b border-slate-200">
                     <th className="px-6 py-5 text-left text-sm font-semibold text-slate-500">
-                      Tính năng
+                      {t('nav.features')}
                     </th>
-                    {pricingPlans.map((plan) => (
+                    {plans.map((plan) => (
                       <th
                         key={plan.id}
                         className={cn(
@@ -565,7 +692,7 @@ export function PricingPage() {
                             {plan.name}
                           </span>
                           {plan.highlight && (
-                            <Badge tone="brand">Phổ biến</Badge>
+                            <Badge tone="brand">{t('pricing.popular')}</Badge>
                           )}
                         </div>
                       </th>
@@ -582,14 +709,14 @@ export function PricingPage() {
                       )}
                     >
                       <td className="px-6 py-4 text-sm font-medium text-slate-700">
-                        {row.label}
+                        {t(row.label)}
                       </td>
                       {row.cells.map((cell, ci) => (
                         <td
                           key={ci}
                           className={cn(
                             'px-6 py-4 text-center',
-                            pricingPlans[ci].highlight && 'bg-slate-50',
+                            plans[ci].highlight && 'bg-slate-50',
                           )}
                         >
                           <div className="flex justify-center">
@@ -617,13 +744,13 @@ export function PricingPage() {
             className="mb-8 text-center"
           >
             <Badge tone="candy" dot>
-              Hỏi xoáy đáp xoay
+              {t('pricing.faqChip')}
             </Badge>
             <h2 className="mt-4 text-3xl font-black text-slate-900 sm:text-4xl">
-              Thắc mắc thường gặp 🤔
+              {t('pricing.faqTitle')}
             </h2>
             <p className="mt-2 text-slate-500">
-              Chưa rõ chỗ nào? Đây là những câu mọi người hay hỏi nhất.
+              {t('pricing.faqSubtitle')}
             </p>
           </motion.div>
 
@@ -634,9 +761,17 @@ export function PricingPage() {
             viewport={{ once: true, margin: '-60px' }}
             className="space-y-3"
           >
-            {faqs.map((f) => (
-              <FaqItem key={f.q} q={f.q} a={f.a} />
-            ))}
+            {faqs.map((f, i) => {
+              // Q/A đến từ mockData theo thứ tự cố định; giải mã theo index.
+              const keys = FAQ_KEYS[i]
+              return (
+                <FaqItem
+                  key={i}
+                  q={keys ? t(keys[0]) : f.q}
+                  a={keys ? t(keys[1]) : f.a}
+                />
+              )
+            })}
           </motion.div>
         </div>
       </section>
@@ -669,14 +804,13 @@ export function PricingPage() {
               </motion.div>
 
               <div className="relative">
-                <AIChip label="Bắt đầu trong 30 giây" className="mx-auto" />
+                <AIChip label={t('pricing.ctaChip')} className="mx-auto" />
                 <h2 className="mt-5 text-3xl font-black leading-tight text-slate-900 sm:text-4xl md:text-5xl">
-                  Sẵn sàng nâng cấp{' '}
-                  <span className="text-gradient">não thứ hai</span> chưa? 🧠
+                  {t('pricing.ctaTitlePre')}{' '}
+                  <span className="text-gradient">{t('pricing.ctaTitleHi')}</span> {t('pricing.ctaTitlePost')}
                 </h2>
                 <p className="mx-auto mt-4 max-w-lg text-base text-slate-600 sm:text-lg">
-                  Đăng ký miễn phí, dùng thử Pro 14 ngày. Không thích thì hủy
-                  trong 1 chạm — chẳng mất gì cả.
+                  {t('pricing.ctaDesc')}
                 </p>
                 <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
                   <Button
@@ -686,7 +820,7 @@ export function PricingPage() {
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.96 }}
                   >
-                    Dùng thử miễn phí
+                    {t('nav.tryFree')}
                     <ArrowRight className="ml-1.5 h-4 w-4" />
                   </Button>
                   <Button
@@ -696,12 +830,11 @@ export function PricingPage() {
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.96 }}
                   >
-                    Xem demo trước
+                    {t('pricing.watchDemo')}
                   </Button>
                 </div>
                 <p className="mt-5 text-xs text-slate-400">
-                  Đã có hơn 180K người dùng đang xây kho tri thức của họ trên
-                  CloudMind 💜
+                  {t('pricing.ctaFootnote')}
                 </p>
               </div>
             </div>
@@ -738,12 +871,13 @@ function BillingToggle({
   checked: boolean
   onChange: (v: boolean) => void
 }) {
+  const t = useT()
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      aria-label="Đổi chu kỳ thanh toán"
+      aria-label={t('pricing.toggleAria')}
       onClick={() => onChange(!checked)}
       className={cn(
         'relative h-7 w-12 shrink-0 rounded-full transition-colors ring-focus',

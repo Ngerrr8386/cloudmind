@@ -4,6 +4,7 @@ import {
   Image, Wallet, BookMarked, Folder as FolderIcon, type LucideIcon,
 } from 'lucide-react'
 import type { FileType } from '@/lib/types'
+import { useT, type TranslationKey } from '@/lib/i18n'
 
 /** Map folder icon name (string from data) → Lucide component. */
 const folderIconMap: Record<string, LucideIcon> = {
@@ -38,7 +39,13 @@ export function fileTint(type: FileType) {
   return fileTypeMap[type]?.tint ?? 'text-slate-500'
 }
 
-export const fileTypeLabel: Record<FileType, string> = {
-  pdf: 'PDF', doc: 'Tài liệu', sheet: 'Bảng tính', slide: 'Slide', image: 'Ảnh',
-  video: 'Video', audio: 'Âm thanh', code: 'Mã nguồn', archive: 'Nén', note: 'Ghi chú',
+export const fileTypeLabel: Record<FileType, TranslationKey> = {
+  pdf: 'ftype.pdf', doc: 'ftype.doc', sheet: 'ftype.sheet', slide: 'ftype.slide', image: 'ftype.image',
+  video: 'ftype.video', audio: 'ftype.audio', code: 'ftype.code', archive: 'ftype.archive', note: 'ftype.note',
+}
+
+/** Hook trả về hàm dịch nhãn loại tệp — dùng khi component đã dùng biến tên `t` cho việc khác. */
+export function useFileTypeLabel(): (type: FileType) => string {
+  const t = useT()
+  return (type) => t(fileTypeLabel[type])
 }

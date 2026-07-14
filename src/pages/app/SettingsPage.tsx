@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import type { ComponentType } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ComponentType, ChangeEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -8,6 +8,7 @@ import {
   HardDrive,
   Sparkles,
   Palette,
+  Languages,
   ShieldCheck,
   Camera,
   Crown,
@@ -27,14 +28,19 @@ import {
   KeyRound,
   LogOut,
   Check,
+  Loader2,
+  Trash2,
+  AlertTriangle,
   type LucideIcon,
 } from 'lucide-react'
-import { Button, Badge, GlassCard, Avatar, Input, Toggle, ProgressRing } from '@/components/ui'
+import { Button, Badge, GlassCard, Avatar, Input, Toggle, ProgressRing, useFileTypeLabel } from '@/components/ui'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher'
 import { api } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
+import { useT, type TranslationKey, type TFunc } from '@/lib/i18n'
 import { useAsync } from '@/lib/useApi'
-import { cn, formatBytes } from '@/lib/utils'
+import { cn, formatBytes, timeAgo } from '@/lib/utils'
 import { staggerContainer, fadeUp, fadeUpLg } from '@/lib/motion'
 
 const STORAGE_COLORS: Record<string, string> = {
@@ -50,35 +56,24 @@ const STORAGE_COLORS: Record<string, string> = {
   archive: '#f59e0b',
 }
 
-const STORAGE_LABELS: Record<string, string> = {
-  pdf: 'PDF',
-  doc: 'Tài liệu',
-  sheet: 'Bảng tính',
-  slide: 'Trình chiếu',
-  note: 'Ghi chú',
-  image: 'Hình ảnh',
-  video: 'Video',
-  audio: 'Âm thanh',
-  code: 'Code',
-  archive: 'Lưu trữ',
-}
-
+// `id` giữ nguyên làm ID logic ổn định (khớp state activeTab & so sánh nơi khác);
+// chỉ nhãn & gợi ý hiển thị được dịch qua labelKey/hintKey.
 type TabId = 'profile' | 'billing' | 'storage' | 'ai' | 'appearance' | 'security'
 
 interface TabDef {
   id: TabId
-  label: string
+  labelKey: TranslationKey
+  hintKey: TranslationKey
   icon: LucideIcon
-  hint: string
 }
 
 const TABS: TabDef[] = [
-  { id: 'profile', label: 'Hồ sơ', icon: User, hint: 'Thông tin của bạn' },
-  { id: 'billing', label: 'Gói & Thanh toán', icon: CreditCard, hint: 'Gói Pro đang chạy' },
-  { id: 'storage', label: 'Lưu trữ', icon: HardDrive, hint: 'Dung lượng đã dùng' },
-  { id: 'ai', label: 'AI & Quyền riêng tư', icon: Sparkles, hint: 'Kiểm soát AI' },
-  { id: 'appearance', label: 'Giao diện', icon: Palette, hint: 'Theme & màu nhấn' },
-  { id: 'security', label: 'Bảo mật', icon: ShieldCheck, hint: 'Khoá chặt tài khoản' },
+  { id: 'profile', labelKey: 'settings.tabProfile', hintKey: 'settings.tabProfileHint', icon: User },
+  { id: 'billing', labelKey: 'settings.tabBilling', hintKey: 'settings.tabBillingHint', icon: CreditCard },
+  { id: 'storage', labelKey: 'settings.tabStorage', hintKey: 'settings.tabStorageHint', icon: HardDrive },
+  { id: 'ai', labelKey: 'settings.tabAi', hintKey: 'settings.tabAiHint', icon: Sparkles },
+  { id: 'appearance', labelKey: 'settings.tabAppearance', hintKey: 'settings.tabAppearanceHint', icon: Palette },
+  { id: 'security', labelKey: 'settings.tabSecurity', hintKey: 'settings.tabSecurityHint', icon: ShieldCheck },
 ]
 
 const tabContent = {
@@ -89,14 +84,28 @@ const tabContent = {
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>('profile')
+  const t = useT()
 
   return (
     <div className="mx-auto w-full max-w-6xl">
       <PageHeader
-        eyebrow={<Badge tone="brand" dot>Trung tâm điều khiển</Badge>}
-        title="Cài đặt"
-        subtitle="Chỉnh CloudMind cho đúng gu của bạn — từ hồ sơ, gói cước tới mức độ AI được phép nhúng tay vào ✨"
+        eyebrow={<Badge tone="brand" dot>{t('settings.eyebrow')}</Badge>}
+        title={t('settings.title')}
+        subtitle={t('settings.subtitle')}
       />
+
+      <GlassCard className="mb-6 flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-ink-50 text-ink-600">
+            <Languages className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900">{t('lang.label')}</h3>
+            <p className="text-xs text-slate-500">{t('lang.desc')}</p>
+          </div>
+        </div>
+        <LanguageSwitcher />
+      </GlassCard>
 
       <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
         {/* Desktop vertical tab nav */}
@@ -137,8 +146,8 @@ export function SettingsPage() {
                     <tab.icon className="h-4.5 w-4.5" strokeWidth={2.2} />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-semibold leading-tight">{tab.label}</span>
-                    <span className="block truncate text-[11px] text-slate-400">{tab.hint}</span>
+                    <span className="block text-sm font-semibold leading-tight">{t(tab.labelKey)}</span>
+                    <span className="block truncate text-[11px] text-slate-400">{t(tab.hintKey)}</span>
                   </span>
                 </motion.button>
               )
@@ -160,7 +169,7 @@ export function SettingsPage() {
                 )}
               >
                 <tab.icon className="h-4 w-4" strokeWidth={2.2} />
-                {tab.label}
+                {t(tab.labelKey)}
               </button>
             )
           })}
@@ -202,7 +211,8 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 /* ---------- HỒ SƠ ---------- */
 
 function ProfileSection() {
-  const { user } = useAuth()
+  const t = useT()
+  const { user, refreshUser } = useAuth()
   const { data: profile } = useAsync(() => api.getProfile(), [])
   const [name, setName] = useState('')
   const [handle, setHandle] = useState('')
@@ -210,7 +220,24 @@ function ProfileSection() {
   const [bio, setBio] = useState('')
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const hydrated = useRef(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleAvatarPick(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingAvatar(true)
+    try {
+      await api.uploadAvatar(file)
+      await refreshUser()
+    } catch {
+      /* bỏ qua lỗi — không crash */
+    } finally {
+      setUploadingAvatar(false)
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+    }
+  }
 
   useEffect(() => {
     if (hydrated.current) return
@@ -236,50 +263,58 @@ function ProfileSection() {
     }
   }
 
+  function handleReset() {
+    setName(profile?.name ?? user?.name ?? '')
+    setHandle(profile?.handle ?? user?.handle ?? '')
+    setEmail(profile?.email ?? user?.email ?? '')
+    setBio(profile?.bio ?? '')
+  }
+
   return (
     <GlassCard className="p-6 md:p-7">
-      <SectionHeading title="Hồ sơ" desc="Đây là cách CloudMind và team của bạn nhìn thấy bạn." />
+      <SectionHeading title={t('settings.profileTitle')} desc={t('settings.profileDesc')} />
 
       <div className="mb-6 flex flex-col items-center gap-4 rounded-2xl bg-slate-50 p-5 sm:flex-row sm:items-center">
-        <div className="relative">
+        <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarPick} />
+        <button type="button" onClick={() => avatarInputRef.current?.click()} className="relative ring-focus rounded-full" aria-label={t('settings.changeAvatarAria')}>
           <Avatar initials={user?.initials ?? ''} tone={user?.tone ?? 'indigo'} size="lg" ring />
           <span className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full bg-gradient-brand text-white shadow-glow">
-            <Camera className="h-3.5 w-3.5" />
+            {uploadingAvatar ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
           </span>
-        </div>
+        </button>
         <div className="text-center sm:text-left">
           <div className="text-base font-bold text-slate-900">{name}</div>
           <div className="text-sm text-slate-500">{handle}</div>
         </div>
         <div className="sm:ml-auto">
-          <Button variant="glass" size="sm">
+          <Button variant="glass" size="sm" disabled={uploadingAvatar} onClick={() => avatarInputRef.current?.click()}>
             <Camera className="h-4 w-4" />
-            Đổi ảnh
+            {uploadingAvatar ? t('common.loading') : t('settings.changePhoto')}
           </Button>
         </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <FieldLabel>Tên hiển thị</FieldLabel>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Tên của bạn" />
+          <FieldLabel>{t('settings.displayName')}</FieldLabel>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('auth.name')} />
         </div>
         <div>
-          <FieldLabel>Username</FieldLabel>
+          <FieldLabel>{t('settings.username')}</FieldLabel>
           <Input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="@username" />
         </div>
         <div className="sm:col-span-2">
-          <FieldLabel>Email</FieldLabel>
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="ban@email.vn" />
+          <FieldLabel>{t('auth.email')}</FieldLabel>
+          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={t('settings.emailPlaceholder')} />
         </div>
         <div className="sm:col-span-2">
-          <FieldLabel>Tiểu sử</FieldLabel>
+          <FieldLabel>{t('settings.bio')}</FieldLabel>
           <textarea
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             rows={3}
             maxLength={160}
-            placeholder="Kể vài dòng về bạn..."
+            placeholder={t('settings.bioPlaceholder')}
             className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 placeholder:text-slate-400 ring-focus transition-colors focus:border-grape-400/50 focus:bg-slate-100"
           />
           <div className="mt-1 text-right text-[11px] text-slate-400">{bio.length}/160</div>
@@ -287,8 +322,8 @@ function ProfileSection() {
       </div>
 
       <div className="mt-6 flex flex-col-reverse items-center gap-3 sm:flex-row sm:justify-end">
-        <Button variant="ghost" size="md" className="w-full sm:w-auto">
-          Khôi phục
+        <Button variant="ghost" size="md" className="w-full sm:w-auto" onClick={handleReset}>
+          {t('settings.reset')}
         </Button>
         <Button
           variant="primary"
@@ -300,12 +335,12 @@ function ProfileSection() {
           {saved ? (
             <>
               <Check className="h-4 w-4" />
-              Đã lưu!
+              {t('settings.saved')}
             </>
           ) : saving ? (
-            'Đang lưu...'
+            t('settings.saving')
           ) : (
-            'Lưu thay đổi'
+            t('common.save')
           )}
         </Button>
       </div>
@@ -316,6 +351,7 @@ function ProfileSection() {
 /* ---------- GÓI & THANH TOÁN ---------- */
 
 function BillingSection() {
+  const t = useT()
   const navigate = useNavigate()
   const { user } = useAuth()
   const { data: sub, reload: reloadSub } = useAsync(() => api.subscription(), [])
@@ -323,7 +359,7 @@ function BillingSection() {
 
   const handleManage = async () => {
     if (sub && !sub.isFree && sub.status === 'active') {
-      if (!window.confirm('Huỷ gia hạn gói hiện tại? Bạn vẫn dùng được tới hết kỳ.')) return
+      if (!window.confirm(t('settings.cancelRenewConfirm'))) return
       try { await api.cancelSubscription() } catch { /* ignore */ }
       reloadSub()
     } else {
@@ -337,8 +373,8 @@ function BillingSection() {
     : '—'
   const priceMonthly =
     typeof sub?.plan?.priceMonthly === 'number'
-      ? `${sub.plan.priceMonthly.toLocaleString('vi-VN')}₫ / tháng`
-      : 'Miễn phí'
+      ? t('settings.pricePerMonth', { price: sub.plan.priceMonthly.toLocaleString('vi-VN') })
+      : t('settings.free')
 
   return (
     <div className="space-y-5">
@@ -350,15 +386,15 @@ function BillingSection() {
             <div>
               <div className="mb-2 flex items-center gap-2">
                 <Crown className="h-5 w-5 text-white" />
-                <span className="text-xs font-bold uppercase tracking-widest text-white/80">Gói hiện tại</span>
+                <span className="text-xs font-bold uppercase tracking-widest text-white/80">{t('settings.currentPlan')}</span>
               </div>
               <div className="text-3xl font-extrabold text-white">CloudMind {planName}</div>
               <p className="mt-1 text-sm text-white/75">
-                500 GB lưu trữ · Hỏi đáp AI không giới hạn · Gợi ý thư mục thông minh
+                {t('settings.planFeatures')}
               </p>
             </div>
             <div className="shrink-0 rounded-2xl bg-white/15 px-4 py-3 text-white backdrop-blur">
-              <div className="text-[11px] uppercase tracking-wide text-white/70">Gia hạn vào</div>
+              <div className="text-[11px] uppercase tracking-wide text-white/70">{t('settings.renewsOn')}</div>
               <div className="text-lg font-bold">{renewAt}</div>
               <div className="text-xs text-white/70">{priceMonthly}</div>
             </div>
@@ -366,33 +402,33 @@ function BillingSection() {
           <div className="relative mt-5 flex flex-wrap gap-3">
             <Button variant="secondary" size="md" onClick={() => navigate('/pricing')}>
               <ArrowUpRight className="h-4 w-4" />
-              Nâng cấp Team
+              {t('sidebar.upgradeTitle')}
             </Button>
             <Button variant="glass" size="md" className="!bg-white/15 hover:!bg-white/25" onClick={handleManage}>
-              {sub && !sub.isFree && sub.status === 'active' ? 'Huỷ gia hạn' : 'Quản lý gói'}
+              {sub && !sub.isFree && sub.status === 'active' ? t('settings.cancelRenew') : t('settings.managePlan')}
             </Button>
           </div>
         </div>
       </GlassCard>
 
       <GlassCard className="p-6 md:p-7">
-        <SectionHeading title="Phương thức thanh toán" desc="Thẻ mặc định dùng để gia hạn tự động." />
+        <SectionHeading title={t('settings.paymentMethodTitle')} desc={t('settings.paymentMethodDesc')} />
         <div className="flex flex-col gap-4 rounded-2xl bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="grid h-11 w-16 place-items-center rounded-xl bg-ink-600 text-xs font-black tracking-widest text-white">
-              VISA
+              <CreditCard className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-sm font-semibold text-slate-800">•••• •••• •••• 4242</div>
-              <div className="text-xs text-slate-500">Hết hạn 09/28 · Minh Anh</div>
+              <div className="text-sm font-semibold text-slate-800">{t('settings.payosSecure')}</div>
+              <div className="text-xs text-slate-500">{t('settings.payosDesc')}</div>
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Badge tone="mint" dot>
-              Đang dùng
+              {t('settings.inUse')}
             </Badge>
-            <Button variant="ghost" size="sm">
-              Đổi thẻ
+            <Button variant="ghost" size="sm" onClick={() => navigate('/pricing')}>
+              {t('settings.changeCard')}
             </Button>
           </div>
         </div>
@@ -401,12 +437,9 @@ function BillingSection() {
       <GlassCard className="p-6 md:p-7">
         <div className="mb-5 flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold tracking-tight text-slate-900 md:text-xl">Hoá đơn gần đây</h2>
-            <p className="mt-1 text-sm text-slate-500">Tải về để khai báo hoặc lưu trữ.</p>
+            <h2 className="text-lg font-bold tracking-tight text-slate-900 md:text-xl">{t('settings.invoicesTitle')}</h2>
+            <p className="mt-1 text-sm text-slate-500">{t('settings.invoicesDesc')}</p>
           </div>
-          <Button variant="ghost" size="sm" className="hidden sm:inline-flex">
-            Xem tất cả
-          </Button>
         </div>
         <motion.div variants={staggerContainer(0.06)} initial="hidden" animate="show" className="space-y-2">
           {(invoices ?? []).map((inv: any, i: number) => {
@@ -418,7 +451,9 @@ function BillingSection() {
               typeof inv?.amount === 'number'
                 ? `${inv.amount.toLocaleString('vi-VN')}₫`
                 : (inv?.amount ?? '—')
-            const status = inv?.status ?? 'Đã thanh toán'
+            const status = inv?.status ?? t('settings.paid')
+            const downloadUrl: string | undefined =
+              inv?.url ?? inv?.link ?? inv?.downloadUrl ?? inv?.invoiceUrl
             return (
               <motion.div
                 key={id}
@@ -434,15 +469,21 @@ function BillingSection() {
                 </div>
                 <div className="hidden text-sm font-semibold text-slate-800 sm:block">{amount}</div>
                 <Badge tone="mint">{status}</Badge>
-                <button className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 ring-focus transition-colors hover:bg-slate-100 hover:text-slate-900">
-                  <Download className="h-4 w-4" />
-                </button>
+                {downloadUrl && (
+                  <button
+                    onClick={() => window.open(downloadUrl, '_blank', 'noopener,noreferrer')}
+                    aria-label={t('settings.downloadInvoiceAria')}
+                    className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 ring-focus transition-colors hover:bg-slate-100 hover:text-slate-900"
+                  >
+                    <Download className="h-4 w-4" />
+                  </button>
+                )}
               </motion.div>
             )
           })}
           {(invoices ?? []).length === 0 && (
             <p className="rounded-2xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-              Chưa có hoá đơn nào — gói của bạn vẫn đang miễn phí 🎉
+              {t('settings.noInvoices')}
             </p>
           )}
         </motion.div>
@@ -454,6 +495,8 @@ function BillingSection() {
 /* ---------- LƯU TRỮ ---------- */
 
 function StorageSection() {
+  const t = useT()
+  const fileTypeLabel = useFileTypeLabel()
   const { user } = useAuth()
   const { data: breakdownRaw } = useAsync(() => api.storageBreakdown(), [])
 
@@ -464,7 +507,8 @@ function StorageSection() {
   const storageBreakdown: { name: string; value: number; color: string }[] = (
     (breakdownRaw ?? []) as any[]
   ).map((seg) => ({
-    name: STORAGE_LABELS[seg?.type] ?? 'Khác',
+    // seg?.type là mã loại tệp (logic từ backend); nhãn hiển thị dịch qua useFileTypeLabel.
+    name: seg?.type in STORAGE_COLORS ? fileTypeLabel(seg.type) : t('settings.storageOther'),
     value: Math.round(((seg?.size ?? 0) / 1024 ** 3) * 10) / 10,
     color: STORAGE_COLORS[seg?.type] ?? '#f59e0b',
   }))
@@ -472,13 +516,13 @@ function StorageSection() {
   return (
     <div className="space-y-5">
       <GlassCard className="p-6 md:p-7">
-        <SectionHeading title="Lưu trữ" desc="Tổng quan dung lượng đang chiếm dụng trên đám mây của bạn." />
+        <SectionHeading title={t('settings.storageTitle')} desc={t('settings.storageDesc')} />
 
         <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:gap-8">
           <ProgressRing progress={percent} size={150} stroke={12}>
             <div className="text-center">
               <div className="text-3xl font-extrabold text-gradient">{percent}%</div>
-              <div className="text-[11px] text-slate-500">đã dùng</div>
+              <div className="text-[11px] text-slate-500">{t('dashboard.used')}</div>
             </div>
           </ProgressRing>
 
@@ -526,20 +570,14 @@ function StorageSection() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-slate-900">Dọn dẹp gợi ý bởi AI</h3>
+                <h3 className="text-base font-bold text-slate-900">{t('settings.cleanupTitle')}</h3>
                 <Badge tone="ai">AI</Badge>
               </div>
               <p className="mt-1 max-w-md text-sm text-slate-600">
-                Mình soi ra <span className="font-semibold text-slate-900">14 file trùng lặp</span> và{' '}
-                <span className="font-semibold text-slate-900">6 bản nháp cũ</span> — gom lại có thể giải phóng tận{' '}
-                <span className="font-semibold text-gradient-mint">4.2 GB</span> 🧹
+                {t('settings.cleanupDesc')}
               </p>
             </div>
           </div>
-          <Button variant="primary" size="md" className="shrink-0">
-            <Wand2 className="h-4 w-4" />
-            Dọn ngay
-          </Button>
         </div>
       </GlassCard>
     </div>
@@ -555,6 +593,7 @@ interface AIRow {
 }
 
 function AISection() {
+  const t = useT()
   const { data: settings } = useAsync(() => api.getSettings(), [])
   const [autoSummary, setAutoSummary] = useState(true)
   const [smartFolders, setSmartFolders] = useState(true)
@@ -577,12 +616,13 @@ function AISection() {
     })
   }
 
-  const rows: { def: AIRow; value: boolean; set: (v: boolean) => void }[] = [
+  const rows: { id: string; def: AIRow; value: boolean; set: (v: boolean) => void }[] = [
     {
+      id: 'autoSummary',
       def: {
         icon: Wand2,
-        title: 'Tự động tóm tắt khi tải lên',
-        desc: 'Mỗi file mới sẽ được AI đọc và tạo tóm tắt ngắn gọn ngay lập tức.',
+        title: t('settings.aiAutoSummaryTitle'),
+        desc: t('settings.aiAutoSummaryDesc'),
       },
       value: autoSummary,
       set: (v) => {
@@ -591,10 +631,11 @@ function AISection() {
       },
     },
     {
+      id: 'smartFolders',
       def: {
         icon: FolderTree,
-        title: 'Gợi ý thư mục thông minh',
-        desc: 'AI đoán file nên nằm ở đâu dựa trên nội dung, đỡ phải kéo thả thủ công.',
+        title: t('settings.aiSmartFoldersTitle'),
+        desc: t('settings.aiSmartFoldersDesc'),
       },
       value: smartFolders,
       set: (v) => {
@@ -603,10 +644,11 @@ function AISection() {
       },
     },
     {
+      id: 'allowIndex',
       def: {
         icon: ScanSearch,
-        title: 'Cho phép AI lập chỉ mục',
-        desc: 'Bật để tìm kiếm ngữ nghĩa và hỏi đáp tài liệu hoạt động chuẩn nhất.',
+        title: t('settings.aiIndexTitle'),
+        desc: t('settings.aiIndexDesc'),
       },
       value: allowIndex,
       set: (v) => {
@@ -615,10 +657,11 @@ function AISection() {
       },
     },
     {
+      id: 'improveData',
       def: {
         icon: FlaskConical,
-        title: 'Dùng dữ liệu để cải thiện',
-        desc: 'Chia sẻ dữ liệu ẩn danh để giúp mô hình thông minh hơn. Bạn toàn quyền tắt.',
+        title: t('settings.aiImproveTitle'),
+        desc: t('settings.aiImproveDesc'),
       },
       value: improveData,
       set: (v) => {
@@ -632,13 +675,13 @@ function AISection() {
     <div className="space-y-5">
       <GlassCard className="p-6 md:p-7">
         <SectionHeading
-          title="AI & Quyền riêng tư"
-          desc="Bạn là sếp. Quyết định AI được làm gì với dữ liệu của mình."
+          title={t('settings.aiTitle')}
+          desc={t('settings.aiDesc')}
         />
         <motion.div variants={staggerContainer(0.06)} initial="hidden" animate="show" className="space-y-3">
           {rows.map((row) => (
             <motion.div
-              key={row.def.title}
+              key={row.id}
               variants={fadeUp}
               className={cn(
                 'flex items-start gap-4 rounded-2xl border p-4 transition-colors',
@@ -666,7 +709,7 @@ function AISection() {
       <GlassCard className="flex items-center gap-3 p-5">
         <ShieldCheck className="h-5 w-5 shrink-0 text-mint-500" />
         <p className="text-sm text-slate-600">
-          Dữ liệu của bạn được mã hoá end-to-end. AI chỉ chạm vào file khi bạn cho phép, không bao giờ rò rỉ ra ngoài 🔐
+          {t('settings.aiPrivacyNote')}
         </p>
       </GlassCard>
     </div>
@@ -677,15 +720,16 @@ function AISection() {
 
 interface ThemeOption {
   id: string
-  label: string
-  desc: string
+  labelKey: TranslationKey
+  descKey: TranslationKey
   icon: LucideIcon
 }
 
+// `id` là giá trị logic (khớp state theme & gửi lên API); nhãn/mô tả dịch qua labelKey/descKey.
 const themeOptions: ThemeOption[] = [
-  { id: 'dark', label: 'Tối', desc: 'Mặc định, dịu mắt', icon: Moon },
-  { id: 'light', label: 'Sáng', desc: 'Tươi sáng ban ngày', icon: Sun },
-  { id: 'auto', label: 'Tự động', desc: 'Theo hệ thống', icon: Monitor },
+  { id: 'dark', labelKey: 'settings.themeDark', descKey: 'settings.themeDarkDesc', icon: Moon },
+  { id: 'light', labelKey: 'settings.themeLight', descKey: 'settings.themeLightDesc', icon: Sun },
+  { id: 'auto', labelKey: 'settings.themeAuto', descKey: 'settings.themeAutoDesc', icon: Monitor },
 ]
 
 const accentSwatches: { id: string; label: string; className: string }[] = [
@@ -698,6 +742,7 @@ const accentSwatches: { id: string; label: string; className: string }[] = [
 ]
 
 function AppearanceSection() {
+  const t = useT()
   const { data: settings } = useAsync(() => api.getSettings(), [])
   const [theme, setTheme] = useState('dark')
   const [accent, setAccent] = useState('grape')
@@ -734,7 +779,7 @@ function AppearanceSection() {
   return (
     <div className="space-y-5">
       <GlassCard className="p-6 md:p-7">
-        <SectionHeading title="Chủ đề" desc="Chọn vibe sáng hay tối cho không gian của bạn." />
+        <SectionHeading title={t('settings.themeTitle')} desc={t('settings.themeDesc')} />
         <motion.div
           variants={staggerContainer(0.06)}
           initial="hidden"
@@ -768,8 +813,8 @@ function AppearanceSection() {
                 >
                   <opt.icon className="h-5 w-5" />
                 </div>
-                <div className="mt-3 text-sm font-bold text-slate-900">{opt.label}</div>
-                <div className="text-xs text-slate-400">{opt.desc}</div>
+                <div className="mt-3 text-sm font-bold text-slate-900">{t(opt.labelKey)}</div>
+                <div className="text-xs text-slate-400">{t(opt.descKey)}</div>
               </motion.button>
             )
           })}
@@ -777,7 +822,7 @@ function AppearanceSection() {
       </GlassCard>
 
       <GlassCard className="p-6 md:p-7">
-        <SectionHeading title="Màu nhấn" desc="Màu chủ đạo cho nút, badge và điểm nhấn khắp app." />
+        <SectionHeading title={t('settings.accentTitle')} desc={t('settings.accentDesc')} />
         <div className="flex flex-wrap gap-3">
           {accentSwatches.map((sw) => {
             const active = sw.id === accent
@@ -812,8 +857,8 @@ function AppearanceSection() {
             <Sparkles className="h-5 w-5" />
           </div>
           <div>
-            <div className="text-sm font-semibold text-slate-800">Giảm chuyển động</div>
-            <p className="mt-0.5 text-xs text-slate-500">Tắt bớt hiệu ứng động cho trải nghiệm nhẹ nhàng, ổn định hơn.</p>
+            <div className="text-sm font-semibold text-slate-800">{t('settings.reduceMotion')}</div>
+            <p className="mt-0.5 text-xs text-slate-500">{t('settings.reduceMotionDesc')}</p>
           </div>
         </div>
         <Toggle checked={reduceMotion} onChange={changeReduceMotion} />
@@ -824,35 +869,99 @@ function AppearanceSection() {
 
 /* ---------- BẢO MẬT ---------- */
 
-interface SessionDef {
-  icon: ComponentType<{ className?: string }>
-  device: string
-  meta: string
-  current: boolean
+interface ApiSession {
+  id: string
+  userAgent?: string
+  ip?: string
+  createdAt: string
+  expiresAt?: string
 }
 
-const sessions: SessionDef[] = [
-  { icon: Laptop, device: 'MacBook Pro · Chrome', meta: 'Hà Nội, VN · Đang hoạt động', current: true },
-  { icon: Smartphone, device: 'iPhone 16 · CloudMind App', meta: 'Hà Nội, VN · 2 giờ trước', current: false },
-  { icon: Tablet, device: 'iPad Air · Safari', meta: 'TP.HCM, VN · Hôm qua', current: false },
-]
+/** Suy ra nhãn thiết bị + icon từ user-agent. Nhãn hãng/OS/trình duyệt là tên riêng, giữ nguyên. */
+function deviceFromUA(ua: string | undefined, t: TFunc): { label: string; icon: ComponentType<{ className?: string }> } {
+  const s = (ua ?? '').toLowerCase()
+  if (s.includes('iphone')) return { label: 'iPhone', icon: Smartphone }
+  if (s.includes('ipad')) return { label: 'iPad', icon: Tablet }
+  if (s.includes('android')) return { label: 'Android', icon: Smartphone }
+  let os = t('settings.deviceGeneric')
+  if (s.includes('mac')) os = 'macOS'
+  else if (s.includes('windows')) os = 'Windows'
+  else if (s.includes('linux')) os = 'Linux'
+  let browser = ''
+  if (s.includes('edg')) browser = 'Edge'
+  else if (s.includes('chrome')) browser = 'Chrome'
+  else if (s.includes('firefox')) browser = 'Firefox'
+  else if (s.includes('safari')) browser = 'Safari'
+  return { label: [os, browser].filter(Boolean).join(' · '), icon: Laptop }
+}
 
 function SecuritySection() {
+  const t = useT()
   const navigate = useNavigate()
   const { logout } = useAuth()
-  const [twoFA, setTwoFA] = useState(true)
+  const { data: profile } = useAsync(() => api.getProfile(), [])
+  const { data: sessionsData, reload: reloadSessions } = useAsync(
+    () => api.listSessions() as Promise<ApiSession[]>,
+    [],
+  )
+  const sessions = useMemo(() => {
+    const list = (sessionsData ?? []) as ApiSession[]
+    return list.map((s, i) => {
+      const d = deviceFromUA(s.userAgent, t)
+      return {
+        id: s.id,
+        icon: d.icon,
+        device: d.label,
+        meta: [s.ip, timeAgo(s.createdAt)].filter(Boolean).join(' · '),
+        current: i === 0, // suy đoán: phiên mới nhất là thiết bị hiện tại
+      }
+    })
+  }, [sessionsData, t])
+  const [twoFA, setTwoFA] = useState(false)
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
   const [pwSaving, setPwSaving] = useState(false)
   const [pwSaved, setPwSaved] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
+  const [revoking, setRevoking] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const twoFaHydrated = useRef(false)
+
+  useEffect(() => {
+    if (twoFaHydrated.current || !profile) return
+    twoFaHydrated.current = true
+    setTwoFA(Boolean((profile as { twoFactorEnabled?: boolean }).twoFactorEnabled))
+  }, [profile])
 
   function toggle2fa(v: boolean) {
     setTwoFA(v)
     api.toggle2fa(v).catch(() => {
       /* coi như rỗng, không crash */
     })
+  }
+
+  async function handleRevoke(id: string) {
+    setRevoking(id)
+    try {
+      await api.revokeSession(id)
+      reloadSessions()
+    } catch {
+      /* coi như rỗng */
+    } finally {
+      setRevoking(null)
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (!window.confirm(t('settings.deleteAccountConfirm'))) return
+    setDeleting(true)
+    try {
+      await api.deleteAccount()
+      await logout()
+    } finally {
+      navigate('/')
+    }
   }
 
   async function handleChangePassword() {
@@ -896,17 +1005,17 @@ function SecuritySection() {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-slate-900">Xác thực 2 lớp (2FA)</h3>
+                <h3 className="text-base font-bold text-slate-900">{t('settings.twoFaTitle')}</h3>
                 {twoFA ? (
                   <Badge tone="mint" dot>
-                    Đang bật
+                    {t('settings.on')}
                   </Badge>
                 ) : (
-                  <Badge tone="neutral">Đang tắt</Badge>
+                  <Badge tone="neutral">{t('settings.off')}</Badge>
                 )}
               </div>
               <p className="mt-1 max-w-md text-sm text-slate-600">
-                Thêm một lớp bảo vệ — cần mã từ app authenticator mỗi khi đăng nhập thiết bị lạ.
+                {t('settings.twoFaDesc')}
               </p>
             </div>
           </div>
@@ -915,24 +1024,24 @@ function SecuritySection() {
       </GlassCard>
 
       <GlassCard className="p-6 md:p-7">
-        <SectionHeading title="Đổi mật khẩu" desc="Nên đổi định kỳ và đừng dùng lại mật khẩu cũ nha." />
+        <SectionHeading title={t('settings.changePwTitle')} desc={t('settings.changePwDesc')} />
         <div className="grid gap-4">
           <div>
-            <FieldLabel>Mật khẩu hiện tại</FieldLabel>
+            <FieldLabel>{t('settings.currentPw')}</FieldLabel>
             <Input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} placeholder="••••••••" />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <FieldLabel>Mật khẩu mới</FieldLabel>
-              <Input type="password" value={next} onChange={(e) => setNext(e.target.value)} placeholder="Ít nhất 8 ký tự" />
+              <FieldLabel>{t('auth.newPassword')}</FieldLabel>
+              <Input type="password" value={next} onChange={(e) => setNext(e.target.value)} placeholder={t('settings.pwMinHint')} />
             </div>
             <div>
-              <FieldLabel>Xác nhận mật khẩu</FieldLabel>
+              <FieldLabel>{t('settings.confirmPw')}</FieldLabel>
               <Input
                 type="password"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
-                placeholder="Nhập lại lần nữa"
+                placeholder={t('settings.confirmPwPlaceholder')}
               />
             </div>
           </div>
@@ -942,12 +1051,12 @@ function SecuritySection() {
             {pwSaved ? (
               <>
                 <Check className="h-4 w-4" />
-                Đã cập nhật!
+                {t('settings.updated')}
               </>
             ) : (
               <>
                 <KeyRound className="h-4 w-4" />
-                {pwSaving ? 'Đang lưu...' : 'Cập nhật mật khẩu'}
+                {pwSaving ? t('settings.saving') : t('settings.updatePw')}
               </>
             )}
           </Button>
@@ -955,11 +1064,11 @@ function SecuritySection() {
       </GlassCard>
 
       <GlassCard className="p-6 md:p-7">
-        <SectionHeading title="Phiên đăng nhập" desc="Những thiết bị đang truy cập tài khoản của bạn." />
+        <SectionHeading title={t('settings.sessionsTitle')} desc={t('settings.sessionsDesc')} />
         <motion.div variants={staggerContainer(0.06)} initial="hidden" animate="show" className="space-y-2">
           {sessions.map((s) => (
             <motion.div
-              key={s.device}
+              key={s.id}
               variants={fadeUp}
               className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3"
             >
@@ -972,15 +1081,24 @@ function SecuritySection() {
               </div>
               {s.current ? (
                 <Badge tone="mint" dot>
-                  Thiết bị này
+                  {t('settings.thisDevice')}
                 </Badge>
               ) : (
-                <Button variant="ghost" size="sm" className="text-candy-500 hover:text-candy-600">
-                  Thu hồi
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-candy-500 hover:text-candy-600"
+                  disabled={revoking === s.id}
+                  onClick={() => handleRevoke(s.id)}
+                >
+                  {revoking === s.id ? t('settings.revoking') : t('settings.revoke')}
                 </Button>
               )}
             </motion.div>
           ))}
+          {sessions.length === 0 && (
+            <p className="rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-400">{t('settings.noOtherSessions')}</p>
+          )}
         </motion.div>
       </GlassCard>
 
@@ -990,15 +1108,33 @@ function SecuritySection() {
             <LogOut className="h-5 w-5" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-900">Đăng xuất tất cả thiết bị</h3>
+            <h3 className="text-base font-bold text-slate-900">{t('settings.logoutAllTitle')}</h3>
             <p className="mt-1 max-w-md text-sm text-slate-600">
-              Kết thúc mọi phiên ở mọi nơi. Bạn sẽ cần đăng nhập lại trên thiết bị này.
+              {t('settings.logoutAllDesc')}
             </p>
           </div>
         </div>
         <Button variant="danger" size="md" className="shrink-0" disabled={loggingOut} onClick={handleLogout}>
           <LogOut className="h-4 w-4" />
-          {loggingOut ? 'Đang đăng xuất...' : 'Đăng xuất'}
+          {loggingOut ? t('settings.loggingOut') : t('settings.logout')}
+        </Button>
+      </GlassCard>
+
+      <GlassCard className="flex flex-col gap-4 border border-rose-500/25 bg-rose-50/30 p-6 sm:flex-row sm:items-center sm:justify-between md:p-7">
+        <div className="flex items-start gap-3">
+          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-rose-500/15 text-rose-600">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">{t('settings.deleteAccount')}</h3>
+            <p className="mt-1 max-w-md text-sm text-slate-600">
+              {t('settings.deleteAccountDesc')}
+            </p>
+          </div>
+        </div>
+        <Button variant="danger" size="md" className="shrink-0" disabled={deleting} onClick={handleDeleteAccount}>
+          <Trash2 className="h-4 w-4" />
+          {deleting ? t('settings.deleting') : t('settings.deleteAccount')}
         </Button>
       </GlassCard>
     </div>

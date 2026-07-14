@@ -1,16 +1,18 @@
 import { Twitter, Github, Instagram, Youtube } from 'lucide-react'
 import { Logo } from '@/components/ui'
+import { useT, type TranslationKey } from '@/lib/i18n'
 
-const cols = [
-  { title: 'Sản phẩm', links: ['Tính năng', 'Bảng giá', 'Tải xuống', 'Cập nhật'] },
-  { title: 'Công ty', links: ['Về chúng tôi', 'Tuyển dụng', 'Blog', 'Liên hệ'] },
-  { title: 'Tài nguyên', links: ['Hướng dẫn', 'API', 'Cộng đồng', 'Trạng thái'] },
-  { title: 'Pháp lý', links: ['Điều khoản', 'Bảo mật', 'Cookie', 'Giấy phép'] },
+const cols: { titleKey: TranslationKey; linkKeys: TranslationKey[] }[] = [
+  { titleKey: 'footer.col.product', linkKeys: ['nav.features', 'nav.pricing', 'footer.download', 'footer.updates'] },
+  { titleKey: 'footer.col.company', linkKeys: ['footer.about', 'footer.careers', 'footer.blog', 'footer.contact'] },
+  { titleKey: 'footer.col.resources', linkKeys: ['footer.guides', 'footer.api', 'footer.community', 'footer.status'] },
+  { titleKey: 'footer.col.legal', linkKeys: ['footer.terms', 'footer.privacy', 'footer.cookie', 'footer.license'] },
 ]
 
 const socials = [Twitter, Instagram, Github, Youtube]
 
 export function Footer() {
+  const t = useT()
   return (
     <footer className="relative border-t border-slate-200 bg-white">
       <div className="mx-auto max-w-6xl px-4 py-14 md:px-6">
@@ -18,7 +20,7 @@ export function Footer() {
           <div>
             <Logo />
             <p className="mt-4 max-w-xs text-sm text-slate-500">
-              Cloud lưu trữ thông minh với AI. Lưu mọi thứ, hỏi bất cứ điều gì, tìm thấy ngay.
+              {t('footer.tagline')}
             </p>
             <div className="mt-5 flex gap-2">
               {socials.map((Icon, i) => (
@@ -29,12 +31,12 @@ export function Footer() {
             </div>
           </div>
           {cols.map((col) => (
-            <div key={col.title}>
-              <h4 className="mb-3 text-sm font-bold text-slate-900">{col.title}</h4>
+            <div key={col.titleKey}>
+              <h4 className="mb-3 text-sm font-bold text-slate-900">{t(col.titleKey)}</h4>
               <ul className="space-y-2.5">
-                {col.links.map((l) => (
-                  <li key={l}>
-                    <a href="#" className="text-sm text-slate-500 transition-colors hover:text-slate-900">{l}</a>
+                {col.linkKeys.map((k) => (
+                  <li key={k}>
+                    <a href="#" className="text-sm text-slate-500 transition-colors hover:text-slate-900">{t(k)}</a>
                   </li>
                 ))}
               </ul>
@@ -45,7 +47,7 @@ export function Footer() {
           <p>© 2026 CloudMind. Made with 💜 in Vietnam.</p>
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            Tất cả hệ thống đang hoạt động
+            {t('footer.allSystems')}
           </div>
         </div>
       </div>

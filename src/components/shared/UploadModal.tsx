@@ -6,18 +6,15 @@ import { tone as toneClasses } from '@/lib/theme'
 import { cn, formatBytes } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { useAsync } from '@/lib/useApi'
+import { useT, type TranslationKey } from '@/lib/i18n'
 import type { Folder, FolderSuggestion } from '@/lib/types'
 
 type Stage = 'drop' | 'analyzing' | 'suggest' | 'uploading' | 'done' | 'error'
 
-const analyzingSteps = [
-  'Đọc nội dung tài liệu...',
-  'Tạo embedding ngữ nghĩa...',
-  'Đối chiếu với thư mục hiện có...',
-  'Chấm điểm độ phù hợp...',
-]
+const analyzingStepKeys: TranslationKey[] = ['upload.step1', 'upload.step2', 'upload.step3', 'upload.step4']
 
 export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onClose: () => void; onUploaded?: () => void }) {
+  const t = useT()
   const [stage, setStage] = useState<Stage>('drop')
   const [step, setStep] = useState(0)
   const [picked, setPicked] = useState<string>('')
@@ -39,10 +36,10 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
       confidence: Math.max(0.3, 0.95 - i * 0.18),
       reason:
         i === 0
-          ? 'Thư mục bạn dùng nhiều nhất, nội dung tương đồng.'
-          : 'Có thể phù hợp dựa trên các tài liệu đã lưu.',
+          ? t('upload.reasonTop')
+          : t('upload.reasonOther'),
     }))
-  }, [folders])
+  }, [folders, t])
 
   // Đặt lựa chọn mặc định khi có gợi ý.
   useEffect(() => {
@@ -65,7 +62,7 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
 
   useEffect(() => {
     if (stage !== 'analyzing') return
-    if (step < analyzingSteps.length) {
+    if (step < analyzingStepKeys.length) {
       const t = setTimeout(() => setStep((s) => s + 1), 650)
       return () => clearTimeout(t)
     }
@@ -120,8 +117,8 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
           <UploadCloud className="h-5 w-5 text-white" />
         </div>
         <div>
-          <h3 className="text-lg font-bold text-slate-900">Tải lên thông minh</h3>
-          <p className="text-sm text-slate-500">AI sẽ tự gợi ý nơi lưu phù hợp nhất</p>
+          <h3 className="text-lg font-bold text-slate-900">{t('upload.title')}</h3>
+          <p className="text-sm text-slate-500">{t('upload.subtitle')}</p>
         </div>
       </div>
 
@@ -150,8 +147,8 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
               <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 2.4, repeat: Infinity }} className="mb-4 grid h-16 w-16 place-items-center rounded-2xl bg-white shadow-soft">
                 <UploadCloud className="h-8 w-8 text-ink-500" />
               </motion.div>
-              <p className="font-semibold text-slate-800">Kéo thả file vào đây</p>
-              <p className="mt-1 text-sm text-slate-400">hoặc bấm để chọn · PDF, ảnh, video, code...</p>
+              <p className="font-semibold text-slate-800">{t('upload.drop')}</p>
+              <p className="mt-1 text-sm text-slate-400">{t('upload.dropHint')}</p>
             </button>
             {firstFile && (
               <div className="mt-4 flex items-center gap-3 rounded-2xl bg-slate-50 border border-slate-200 p-3">
@@ -161,16 +158,16 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-slate-800">
                     {firstFile.name}
-                    {pendingFiles.length > 1 && ` +${pendingFiles.length - 1} file khác`}
+                    {pendingFiles.length > 1 && ` ${t('upload.moreFiles', { count: pendingFiles.length - 1 })}`}
                   </p>
-                  <p className="text-xs text-slate-400">{formatBytes(firstFile.size)} · sẵn sàng tải lên</p>
+                  <p className="text-xs text-slate-400">{t('upload.ready', { size: formatBytes(firstFile.size) })}</p>
                 </div>
                 <Check className="h-5 w-5 text-emerald-500" />
               </div>
             )}
             <Button onClick={startUpload} disabled={pendingFiles.length === 0} className="mt-5 w-full">
               <Sparkles className="h-4 w-4" />
-              Tải lên & phân tích bằng AI
+              {t('upload.analyzeBtn')}
             </Button>
           </motion.div>
         )}
@@ -190,7 +187,7 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
               </div>
             </div>
             <div className="space-y-2">
-              {analyzingSteps.map((label, i) => (
+              {analyzingStepKeys.map((key, i) => (
                 <motion.div
                   key={i}
                   initial={{ opacity: 0.4 }}
@@ -200,7 +197,7 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
                   <span className={cn('grid h-5 w-5 place-items-center rounded-full text-[10px] text-white', i < step ? 'bg-emerald-500' : i === step ? 'bg-ink-600' : 'bg-slate-300')}>
                     {i < step ? <Check className="h-3 w-3" /> : i + 1}
                   </span>
-                  <span className={i <= step ? 'text-slate-700' : 'text-slate-400'}>{label}</span>
+                  <span className={i <= step ? 'text-slate-700' : 'text-slate-400'}>{t(key)}</span>
                 </motion.div>
               ))}
             </div>
@@ -212,7 +209,7 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
           <motion.div key="suggest" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-600">
               <Sparkles className="h-4 w-4" />
-              AI gợi ý nơi lưu cho bạn
+              {t('upload.suggestTitle')}
             </div>
             <div className="space-y-2.5">
               {folderSuggestions.map((s, i) => {
@@ -236,7 +233,7 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <p className="truncate font-semibold text-slate-800">{s.folderName}</p>
-                        {i === 0 && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">Khớp nhất</span>}
+                        {i === 0 && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">{t('upload.bestMatch')}</span>}
                       </div>
                       <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">{s.reason}</p>
                     </div>
@@ -251,10 +248,10 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
               })}
             </div>
             <div className="mt-5 flex gap-2">
-              <Button variant="glass" className="flex-1" onClick={onClose}>Chọn thủ công</Button>
+              <Button variant="glass" className="flex-1" onClick={onClose}>{t('upload.manual')}</Button>
               <Button className="flex-1" onClick={confirmUpload}>
                 <FolderInput className="h-4 w-4" />
-                Lưu vào đây
+                {t('upload.saveHere')}
               </Button>
             </div>
           </motion.div>
@@ -267,7 +264,7 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
               <div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-ink-500" />
             </div>
             <p className="text-sm font-semibold text-slate-700">
-              Đang tải lên {uploaded}/{pendingFiles.length} file…
+              {t('upload.uploading', { done: uploaded, total: pendingFiles.length })}
             </p>
             <div className="mx-auto mt-4 h-1.5 w-48 overflow-hidden rounded-full bg-slate-100">
               <div
@@ -284,14 +281,14 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 15 }} className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full bg-gradient-mint shadow-glow-mint">
               <Check className="h-10 w-10 text-white" strokeWidth={3} />
             </motion.div>
-            <h3 className="text-xl font-bold text-slate-900">Đã lưu thành công! 🎉</h3>
+            <h3 className="text-xl font-bold text-slate-900">{t('upload.doneTitle')}</h3>
             <p className="mt-1 text-sm text-slate-500">
-              File đã vào <span className="font-semibold text-slate-800">{folders.find((f) => f.id === picked)?.name ?? 'kho lưu trữ'}</span> — AI đang lập chỉ mục (có thể mất vài giây)
+              {t('upload.donePre')} <span className="font-semibold text-slate-800">{folders.find((f) => f.id === picked)?.name ?? t('upload.storageFallback')}</span> {t('upload.donePost')}
             </p>
             {failed > 0 && (
-              <p className="mt-2 text-xs font-semibold text-amber-600">{failed} file tải lên thất bại và đã bị bỏ qua.</p>
+              <p className="mt-2 text-xs font-semibold text-amber-600">{t('upload.someFailed', { count: failed })}</p>
             )}
-            <Button className="mt-6 w-full" onClick={onClose}>Tuyệt vời</Button>
+            <Button className="mt-6 w-full" onClick={onClose}>{t('upload.great')}</Button>
           </motion.div>
         )}
 
@@ -301,13 +298,13 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
             <div className="mx-auto mb-4 grid h-20 w-20 place-items-center rounded-full bg-rose-100">
               <AlertTriangle className="h-10 w-10 text-rose-600" />
             </div>
-            <h3 className="text-xl font-bold text-slate-900">Tải lên thất bại</h3>
+            <h3 className="text-xl font-bold text-slate-900">{t('upload.errorTitle')}</h3>
             <p className="mt-1 text-sm text-slate-500">
-              Không tải được {pendingFiles.length > 1 ? `${pendingFiles.length} file` : 'file'} lên máy chủ. Kiểm tra kết nối rồi thử lại nhé.
+              {pendingFiles.length > 1 ? t('upload.errorDescMulti', { count: pendingFiles.length }) : t('upload.errorDescOne')}
             </p>
             <div className="mt-6 flex gap-2">
-              <Button variant="glass" className="flex-1" onClick={onClose}>Đóng</Button>
-              <Button className="flex-1" onClick={confirmUpload}>Thử lại</Button>
+              <Button variant="glass" className="flex-1" onClick={onClose}>{t('upload.close')}</Button>
+              <Button className="flex-1" onClick={confirmUpload}>{t('upload.retry')}</Button>
             </div>
           </motion.div>
         )}

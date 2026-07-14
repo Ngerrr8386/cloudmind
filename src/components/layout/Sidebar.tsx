@@ -2,23 +2,26 @@ import { NavLink } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   LayoutDashboard, FolderOpen, Search, MessageSquareText, Sparkles,
-  Network, Crown, HardDrive,
+  Network, Crown, HardDrive, Users,
 } from 'lucide-react'
 import { Logo, ProgressBar } from '@/components/ui'
 import { useAuth } from '@/lib/auth'
+import { useT, type TranslationKey } from '@/lib/i18n'
 import { formatBytes, cn } from '@/lib/utils'
 
-const nav = [
-  { to: '/app', label: 'Tổng quan', icon: LayoutDashboard, end: true },
-  { to: '/app/files', label: 'Kho lưu trữ', icon: FolderOpen },
-  { to: '/app/search', label: 'Tìm kiếm AI', icon: Search, ai: true },
-  { to: '/app/chat', label: 'Hỏi đáp tài liệu', icon: MessageSquareText, ai: true },
-  { to: '/app/summaries', label: 'Tóm tắt', icon: Sparkles, ai: true },
-  { to: '/app/insights', label: 'Tri thức', icon: Network, ai: true },
+const nav: { to: string; labelKey: TranslationKey; icon: typeof LayoutDashboard; end?: boolean; ai?: boolean }[] = [
+  { to: '/app', labelKey: 'nav.overview', icon: LayoutDashboard, end: true },
+  { to: '/app/files', labelKey: 'nav.files', icon: FolderOpen },
+  { to: '/app/search', labelKey: 'nav.search', icon: Search, ai: true },
+  { to: '/app/chat', labelKey: 'nav.chat', icon: MessageSquareText, ai: true },
+  { to: '/app/summaries', labelKey: 'nav.summaries', icon: Sparkles, ai: true },
+  { to: '/app/insights', labelKey: 'nav.insights', icon: Network, ai: true },
+  { to: '/app/workspace', labelKey: 'nav.workspace', icon: Users },
 ]
 
 export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { user } = useAuth()
+  const t = useT()
   const storageUsed = user?.storageUsed ?? 0
   const storageTotal = user?.storageTotal ?? 1
   const pct = (storageUsed / storageTotal) * 100
@@ -29,7 +32,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <nav className="flex flex-1 flex-col gap-1">
-        <p className="px-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Không gian</p>
+        <p className="px-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">{t('nav.section')}</p>
         {nav.map((item) => (
           <NavLink
             key={item.to}
@@ -53,7 +56,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
                   />
                 )}
                 <item.icon className={cn('relative h-[18px] w-[18px] shrink-0', isActive && 'text-ink-600')} />
-                <span className="relative">{item.label}</span>
+                <span className="relative">{t(item.labelKey)}</span>
                 {item.ai && <Sparkles className="relative ml-auto h-3 w-3 text-ink-400" />}
               </>
             )}
@@ -65,7 +68,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
         <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-500">
           <HardDrive className="h-4 w-4" />
-          Dung lượng
+          {t('sidebar.storage')}
         </div>
         <ProgressBar progress={pct} className="mb-2" />
         <p className="text-xs text-slate-400">
@@ -83,8 +86,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <Crown className="h-5 w-5 text-white" />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-bold text-white">Nâng cấp Team</p>
-          <p className="text-[11px] text-white/80">Mở khóa tri thức không giới hạn</p>
+          <p className="text-sm font-bold text-white">{t('sidebar.upgradeTitle')}</p>
+          <p className="text-[11px] text-white/80">{t('sidebar.upgradeDesc')}</p>
         </div>
       </NavLink>
     </aside>

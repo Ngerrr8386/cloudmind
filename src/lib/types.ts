@@ -41,6 +41,8 @@ export interface Folder {
   fileCount: number
   size: number
   parentId: string | null
+  /** Nếu có: thư mục đang được chia sẻ trong không gian nhóm này. */
+  workspaceId?: string | null
 }
 
 export interface FolderSuggestion {
@@ -104,6 +106,8 @@ export interface PricingPlan {
   features: { text: string; included: boolean }[]
   tone: Tone
   cta: string
+  pricingModel?: string // 'flat' | 'per_seat' (từ API)
+  includedSeats?: number // số ghế kèm theo — chỉ có ở gói per_seat
 }
 
 export interface AppUser {

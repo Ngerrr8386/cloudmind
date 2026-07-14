@@ -1,8 +1,10 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth } from '@/lib/auth'
 import { ApiError } from '@/lib/api'
+import { useT, type TranslationKey } from '@/lib/i18n'
+import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher'
 import {
   Eye,
   EyeOff,
@@ -34,7 +36,7 @@ import { fadeUp, scaleIn, staggerContainer, softSpring } from '@/lib/motion'
 
 /* ---------- password strength helper ---------- */
 
-type Strength = { score: number; label: string; toneClass: string; bar: string }
+type Strength = { score: number; labelKey: TranslationKey | ''; toneClass: string; bar: string }
 
 function evaluatePassword(pw: string): Strength {
   let score = 0
@@ -45,34 +47,19 @@ function evaluatePassword(pw: string): Strength {
   if (/[^A-Za-z0-9]/.test(pw)) score += 1
   score = Math.min(score, 4)
 
-  if (pw.length === 0) return { score: 0, label: '', toneClass: 'text-slate-400', bar: 'bg-slate-200' }
-  if (score <= 1) return { score: 1, label: 'Yếu xìu 😅', toneClass: 'text-rose-600', bar: 'bg-rose-500' }
-  if (score === 2) return { score: 2, label: 'Tạm ổn 🙂', toneClass: 'text-amber-600', bar: 'bg-amber-500' }
-  if (score === 3) return { score: 3, label: 'Khá ngon 💪', toneClass: 'text-blue-600', bar: 'bg-blue-500' }
-  return { score: 4, label: 'Bất khả xâm phạm 🔒', toneClass: 'text-emerald-600', bar: 'bg-emerald-500' }
+  if (pw.length === 0) return { score: 0, labelKey: '', toneClass: 'text-slate-400', bar: 'bg-slate-200' }
+  if (score <= 1) return { score: 1, labelKey: 'auth.pw.weak', toneClass: 'text-rose-600', bar: 'bg-rose-500' }
+  if (score === 2) return { score: 2, labelKey: 'auth.pw.ok', toneClass: 'text-amber-600', bar: 'bg-amber-500' }
+  if (score === 3) return { score: 3, labelKey: 'auth.pw.good', toneClass: 'text-blue-600', bar: 'bg-blue-500' }
+  return { score: 4, labelKey: 'auth.pw.strong', toneClass: 'text-emerald-600', bar: 'bg-emerald-500' }
 }
 
 /* ---------- mini feature bullets ---------- */
 
 const features = [
-  {
-    icon: Brain,
-    title: 'Não thứ hai của bạn',
-    desc: 'Hỏi đáp mọi tài liệu, AI trả lời kèm nguồn trích dẫn.',
-    tone: 'indigo' as Tone,
-  },
-  {
-    icon: Zap,
-    title: 'Sắp xếp tự động',
-    desc: 'Gợi ý folder chuẩn chỉnh, không cần kéo thả mệt nghỉ.',
-    tone: 'emerald' as Tone,
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Riêng tư tuyệt đối',
-    desc: 'Mã hóa end-to-end, dữ liệu của bạn là của bạn.',
-    tone: 'rose' as Tone,
-  },
+  { icon: Brain, titleKey: 'auth.feat1Title', descKey: 'auth.feat1Desc', tone: 'indigo' as Tone },
+  { icon: Zap, titleKey: 'auth.feat2Title', descKey: 'auth.feat2Desc', tone: 'emerald' as Tone },
+  { icon: ShieldCheck, titleKey: 'auth.feat3Title', descKey: 'auth.feat3Desc', tone: 'rose' as Tone },
 ] as const
 
 /* ---------- social button icons ---------- */
@@ -114,6 +101,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
   const navigate = useNavigate()
   const location = useLocation()
   const auth = useAuth()
+  const t = useT()
   const isSignup = mode === 'signup'
   const redirectTo = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/app'
 
@@ -132,8 +120,13 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
   const strength = useMemo(() => evaluatePassword(password), [password])
   const testimonial = testimonials[0]
 
+  // Đã đăng nhập thì không hiện lại form — điều hướng về đích redirect (vd trang lời mời) hoặc vào ứng dụng
+  if (!auth.loading && auth.user) {
+    return <Navigate to={redirectTo} replace />
+  }
+
   function fail(e: unknown) {
-    setError(e instanceof ApiError ? e.message : 'Có lỗi xảy ra, thử lại nhé')
+    setError(e instanceof ApiError ? e.message : t('auth.genericError'))
   }
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -146,11 +139,11 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
       } else if (step === 'reset') {
         await auth.resetPassword(email, code, newPassword)
         setStep('form'); setCode(''); setNewPassword('')
-        setInfo('Đặt lại mật khẩu thành công. Đăng nhập lại nhé!')
+        setInfo(t('auth.resetSuccess'))
       } else if (isSignup) {
         const res = await auth.register({ email, password, name })
         setStep('otp')
-        setInfo(res.devOtp ? `Đã gửi mã xác thực. (Dev OTP: ${res.devOtp})` : 'Đã gửi mã xác thực 6 số tới email của bạn.')
+        setInfo(res.devOtp ? t('auth.otpSentDev', { otp: res.devOtp }) : t('auth.otpSent'))
       } else {
         await auth.login(email, password)
         navigate(redirectTo, { replace: true })
@@ -158,7 +151,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
     } catch (err) {
       if (err instanceof ApiError && err.code === 'EMAIL_NOT_VERIFIED') {
         try { await auth.resendOtp(email) } catch { /* ignore */ }
-        setStep('otp'); setInfo('Tài khoản chưa xác thực. Đã gửi lại mã tới email của bạn.')
+        setStep('otp'); setInfo(t('auth.notVerifiedResent'))
       } else fail(err)
     } finally {
       setSubmitting(false)
@@ -167,17 +160,17 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
 
   async function handleForgot() {
     setError(''); setInfo('')
-    if (!email) { setError('Nhập email của bạn trước nhé'); return }
+    if (!email) { setError(t('auth.enterEmailFirst')); return }
     try {
       const res = await auth.forgotPassword(email)
       setStep('reset')
-      setInfo(res.devOtp ? `Đã gửi mã đặt lại. (Dev OTP: ${res.devOtp})` : 'Đã gửi mã đặt lại mật khẩu tới email.')
+      setInfo(res.devOtp ? t('auth.resetSentDev', { otp: res.devOtp }) : t('auth.resetSent'))
     } catch (err) { fail(err) }
   }
 
   async function handleResend() {
     setError('')
-    try { await auth.resendOtp(email); setInfo('Đã gửi lại mã.') } catch (err) { fail(err) }
+    try { await auth.resendOtp(email); setInfo(t('auth.otpResent')) } catch (err) { fail(err) }
   }
 
   async function handleGoogle() {
@@ -186,18 +179,21 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
       await auth.googleLogin()
       navigate(redirectTo, { replace: true })
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Đăng nhập Google thất bại')
+      setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : t('auth.googleFailed'))
     } finally {
       setSubmitting(false)
     }
   }
 
   function socialUnavailable() {
-    setError('Đăng nhập bằng Apple sẽ sớm ra mắt — dùng Google hoặc email nhé.')
+    setError(t('auth.appleSoon'))
   }
 
   return (
     <div className="relative min-h-screen w-full bg-surface-0 text-slate-800 lg:grid lg:grid-cols-[1.05fr_1fr]">
+      <div className="absolute right-4 top-4 z-30">
+        <LanguageSwitcher />
+      </div>
       {/* ======================= LEFT BRAND PANEL ======================= */}
       <aside className="relative hidden overflow-hidden lg:flex">
         <AnimatedBackground className="absolute inset-0" />
@@ -220,15 +216,14 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
           {/* middle: headline + testimonial */}
           <div className="space-y-9 py-10">
             <motion.div variants={fadeUp} className="space-y-5">
-              <AIChip label="Bộ não đám mây của bạn" />
+              <AIChip label={t('auth.brandChip')} />
               <h1 className="text-4xl font-extrabold leading-[1.08] tracking-tight text-slate-900 xl:text-5xl">
-                Lưu trữ thông minh,
+                {t('auth.brandTitle1')}
                 <br />
-                <span className="text-gradient">nhớ giùm bạn tất cả.</span>
+                <span className="text-gradient">{t('auth.brandTitle2')}</span>
               </h1>
               <p className="max-w-md text-base leading-relaxed text-slate-600">
-                Quăng hết tài liệu vào đây. CloudMind tự sắp xếp, tóm tắt và trả lời mọi câu hỏi của
-                bạn trong tích tắc. ✨
+                {t('auth.brandDesc')}
               </p>
             </motion.div>
 
@@ -257,7 +252,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
           <motion.div variants={fadeUp} className="grid gap-3 sm:grid-cols-1 xl:grid-cols-1">
             {features.map((f) => (
               <div
-                key={f.title}
+                key={f.titleKey}
                 className="flex items-start gap-3.5 rounded-2xl border border-slate-200 bg-slate-50 p-3.5 backdrop-blur-sm"
               >
                 <div
@@ -269,8 +264,8 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                   <f.icon className="h-5 w-5" />
                 </div>
                 <div className="leading-tight">
-                  <p className="text-sm font-semibold text-slate-900">{f.title}</p>
-                  <p className="mt-0.5 text-xs leading-snug text-slate-500">{f.desc}</p>
+                  <p className="text-sm font-semibold text-slate-900">{t(f.titleKey)}</p>
+                  <p className="mt-0.5 text-xs leading-snug text-slate-500">{t(f.descKey)}</p>
                 </div>
               </div>
             ))}
@@ -306,15 +301,15 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
               {/* header */}
               <motion.div variants={fadeUp} className="space-y-2 text-center sm:text-left">
                 <Badge tone="ai" dot className="mb-1">
-                  {isSignup ? 'Miễn phí 14 ngày' : 'An toàn & bảo mật'}
+                  {isSignup ? t('auth.badgeSignup') : t('auth.badgeLogin')}
                 </Badge>
                 <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-                  {isSignup ? 'Tạo tài khoản CloudMind ✨' : 'Chào mừng trở lại 👋'}
+                  {isSignup ? t('auth.titleSignup') : t('auth.titleLogin')}
                 </h2>
                 <p className="text-sm text-slate-500">
                   {isSignup
-                    ? 'Bắt đầu xây bộ não thứ hai của bạn ngay hôm nay.'
-                    : 'Đăng nhập để tiếp tục với đám mây thông minh của bạn.'}
+                    ? t('auth.subtitleSignup')
+                    : t('auth.subtitleLogin')}
                 </p>
               </motion.div>
 
@@ -348,7 +343,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                   {/* divider */}
                   <motion.div variants={fadeUp} className="flex items-center gap-3">
                     <span className="h-px flex-1 bg-slate-200" />
-                    <span className="text-xs font-medium uppercase tracking-wider text-slate-400">hoặc</span>
+                    <span className="text-xs font-medium uppercase tracking-wider text-slate-400">{t('auth.or')}</span>
                     <span className="h-px flex-1 bg-slate-200" />
                   </motion.div>
                 </>
@@ -359,7 +354,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                 {isSignup && step === 'form' && (
                   <div className="space-y-1.5">
                     <label htmlFor="name" className="text-xs font-medium text-slate-600">
-                      Tên của bạn
+                      {t('auth.name')}
                     </label>
                     <div className="relative">
                       <User className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -367,7 +362,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                         id="name"
                         type="text"
                         autoComplete="name"
-                        placeholder="Bảo Trân"
+                        placeholder={t('auth.namePlaceholder')}
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         className="pl-10"
@@ -379,7 +374,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
 
                 <div className="space-y-1.5">
                   <label htmlFor="email" className="text-xs font-medium text-slate-600">
-                    Email
+                    {t('auth.email')}
                   </label>
                   <div className="relative">
                     <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -401,7 +396,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label htmlFor="password" className="text-xs font-medium text-slate-600">
-                      Mật khẩu
+                      {t('auth.password')}
                     </label>
                     {!isSignup && (
                       <button
@@ -409,7 +404,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                         onClick={handleForgot}
                         className="text-xs font-medium text-grape-600 transition-colors hover:text-grape-700"
                       >
-                        Quên mật khẩu?
+                        {t('auth.forgot')}
                       </button>
                     )}
                   </div>
@@ -428,7 +423,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                     <button
                       type="button"
                       onClick={() => setShowPassword((v) => !v)}
-                      aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                      aria-label={showPassword ? t('auth.hidePw') : t('auth.showPw')}
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 transition-colors hover:text-slate-700 ring-focus rounded-md"
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -459,9 +454,9 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                             </div>
                           ))}
                         </div>
-                        {strength.label && (
+                        {strength.labelKey && (
                           <p className={cn('mt-1.5 text-xs font-medium', strength.toneClass)}>
-                            Độ mạnh: {strength.label}
+                            {t('auth.pwStrength')}: {t(strength.labelKey)}
                           </p>
                         )}
                       </div>
@@ -474,7 +469,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                 {/* OTP code (bước xác thực / đặt lại mật khẩu) */}
                 {(step === 'otp' || step === 'reset') && (
                   <div className="space-y-1.5">
-                    <label htmlFor="code" className="text-xs font-medium text-slate-600">Mã OTP (6 số)</label>
+                    <label htmlFor="code" className="text-xs font-medium text-slate-600">{t('auth.otpLabel')}</label>
                     <div className="relative">
                       <ShieldCheck className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <Input
@@ -489,7 +484,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                       />
                     </div>
                     <button type="button" onClick={handleResend} className="text-xs font-medium text-grape-600 hover:text-grape-700">
-                      Gửi lại mã
+                      {t('auth.resendCode')}
                     </button>
                   </div>
                 )}
@@ -497,7 +492,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                 {/* mật khẩu mới (đặt lại) */}
                 {step === 'reset' && (
                   <div className="space-y-1.5">
-                    <label htmlFor="newPassword" className="text-xs font-medium text-slate-600">Mật khẩu mới</label>
+                    <label htmlFor="newPassword" className="text-xs font-medium text-slate-600">{t('auth.newPassword')}</label>
                     <div className="relative">
                       <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <Input id="newPassword" type="password" placeholder="••••••••" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="pl-10" required />
@@ -510,7 +505,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                   <div className="flex items-center justify-between pt-1">
                     <div className="flex items-center gap-3">
                       <Toggle checked={remember} onChange={setRemember} />
-                      <span className="text-sm text-slate-600">Ghi nhớ mình nhé 💜</span>
+                      <span className="text-sm text-slate-600">{t('auth.remember')}</span>
                     </div>
                   </div>
                 )}
@@ -520,28 +515,28 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
                   {submitting ? (
                     <span className="flex items-center gap-2">
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                      Đang xử lý...
+                      {t('auth.processing')}
                     </span>
                   ) : (
                     <>
                       {step === 'otp' ? (
                         <>
                           <ShieldCheck className="h-4 w-4" />
-                          Xác thực email
+                          {t('auth.verifyEmail')}
                         </>
                       ) : step === 'reset' ? (
                         <>
                           <Lock className="h-4 w-4" />
-                          Đặt lại mật khẩu
+                          {t('auth.resetPasswordBtn')}
                         </>
                       ) : isSignup ? (
                         <>
                           <Sparkles className="h-4 w-4" />
-                          Tạo tài khoản
+                          {t('auth.createAccount')}
                         </>
                       ) : (
                         <>
-                          Đăng nhập
+                          {t('auth.login')}
                           <ArrowRight className="h-4 w-4" />
                         </>
                       )}
@@ -554,22 +549,22 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
               <motion.div variants={fadeUp} className="text-center text-sm text-slate-500">
                 {isSignup ? (
                   <>
-                    Đã có tài khoản rồi?{' '}
+                    {t('auth.haveAccount')}{' '}
                     <Link
                       to="/login"
                       className="font-semibold text-gradient transition-opacity hover:opacity-80"
                     >
-                      Đăng nhập ngay
+                      {t('auth.loginNow')}
                     </Link>
                   </>
                 ) : (
                   <>
-                    Chưa có tài khoản?{' '}
+                    {t('auth.noAccount')}{' '}
                     <Link
                       to="/signup"
                       className="font-semibold text-gradient transition-opacity hover:opacity-80"
                     >
-                      Đăng ký miễn phí
+                      {t('auth.signupFree')}
                     </Link>
                   </>
                 )}
@@ -585,7 +580,7 @@ export function AuthPage({ mode }: { mode: 'login' | 'signup' }) {
             className="mt-6 flex items-center justify-center gap-1.5 text-xs text-slate-400"
           >
             <ShieldCheck className="h-3.5 w-3.5" />
-            Mã hóa end-to-end · Dữ liệu của bạn luôn riêng tư
+            {t('auth.trust')}
           </motion.p>
         </motion.div>
       </main>
