@@ -4,7 +4,6 @@ import {
   Upload,
   LayoutGrid,
   List,
-  Sparkles,
   ArrowUpDown,
   Star,
   FileText,
@@ -27,7 +26,6 @@ import {
   Badge,
   GlassCard,
   FolderGlyph,
-  AIChip,
   useFileTypeLabel,
 } from '@/components/ui'
 import { PageHeader } from '@/components/shared/PageHeader'
@@ -36,7 +34,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ShareModal } from '@/components/shared/ShareModal'
 import type { StoredFile, Folder, FileType } from '@/lib/types'
 import { cn, formatBytes } from '@/lib/utils'
-import { staggerContainer, fadeUp, scaleIn, softSpring } from '@/lib/motion'
+import { staggerContainer, fadeUp, softSpring } from '@/lib/motion'
 import { useAppContext } from '@/lib/hooks'
 import { tone } from '@/lib/theme'
 import { api } from '@/lib/api'
@@ -97,6 +95,7 @@ export function FilesPage() {
   const [sortOpen, setSortOpen] = useState(false)
   const [viewTrash, setViewTrash] = useState(false)
   const [shareFile, setShareFile] = useState<{ id: string; name: string } | null>(null)
+  const [openFolder, setOpenFolder] = useState<Folder | null>(null)
 
   const { data: foldersData, loading: foldersLoading } = useAsync(
     () => api.folders() as Promise<Folder[]>,
@@ -313,6 +312,7 @@ export function FilesPage() {
     let result = viewTrash
       ? [...source]
       : source.filter((file) => {
+          if (openFolder && file.folderId !== openFolder.id) return false
           if (f.starred) return file.starred
           if (f.types) return f.types.includes(file.type)
           return true
@@ -332,7 +332,7 @@ export function FilesPage() {
       }
     })
     return result
-  }, [activeFilter, sort, files, viewTrash, trashedFiles])
+  }, [activeFilter, sort, files, viewTrash, trashedFiles, openFolder])
 
   const totalSize = useMemo(
     () => files.reduce((sum, f) => sum + f.size, 0),
@@ -385,55 +385,6 @@ export function FilesPage() {
           </>
         }
       />
-
-      {/* AI suggestion banner */}
-      <motion.div
-        variants={scaleIn}
-        initial="hidden"
-        animate="show"
-        className="mb-8"
-      >
-        <GlassCard
-          glow
-          className="relative overflow-hidden border-indigo-200 p-5 sm:p-6"
-        >
-          <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-indigo-50 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-20 left-10 h-40 w-40 rounded-full bg-sky-50 blur-3xl" />
-          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-4">
-              <motion.div
-                className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-indigo-600 shadow-glow"
-                animate={{ scale: [1, 1.06, 1] }}
-                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                <Sparkles className="h-6 w-6 text-white" />
-              </motion.div>
-              <div>
-                <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                  <AIChip label={t('files.aiSuggest')} />
-                  <Badge tone="mint" dot>
-                    {t('files.aiSaveBadge')}
-                  </Badge>
-                </div>
-                <p className="text-sm font-bold leading-snug text-slate-900 sm:text-base">
-                  {t('files.aiMergeTitle')}
-                </p>
-                <p className="mt-1 max-w-md text-xs text-slate-500">
-                  {t('files.aiMergeDesc')}
-                </p>
-              </div>
-            </div>
-            <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end lg:flex-row lg:items-center">
-              <Button variant="glass" size="md" className="w-full sm:w-auto">
-                {t('files.viewSuggestion')}
-              </Button>
-              <Button variant="ghost" size="md" className="w-full sm:w-auto">
-                {t('files.later')}
-              </Button>
-            </div>
-          </div>
-        </GlassCard>
-      </motion.div>
 
       {/* Folders section */}
       <section className="mb-10">
@@ -538,13 +489,22 @@ export function FilesPage() {
                     )}
                   </div>
                 </div>
-                <div className="mt-3 flex items-center gap-1.5">
-                  <p className="truncate text-sm font-bold text-slate-900">{folder.name}</p>
-                  {folder.workspaceId && <Badge tone="brand">{t('files.teamBadge')}</Badge>}
-                </div>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {t('files.folderMeta', { count: folder.fileCount, size: formatBytes(folder.size) })}
-                </p>
+                <button
+                  type="button"
+                  onClick={() => setOpenFolder(folder)}
+                  disabled={viewTrash}
+                  className="mt-3 block w-full text-left disabled:cursor-default"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate text-sm font-bold text-slate-900 transition-colors group-hover:text-indigo-600">
+                      {folder.name}
+                    </p>
+                    {folder.workspaceId && <Badge tone="brand">{t('files.teamBadge')}</Badge>}
+                  </div>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    {t('files.folderMeta', { count: folder.fileCount, size: formatBytes(folder.size) })}
+                  </p>
+                </button>
               </GlassCard>
             </motion.div>
           ))}
@@ -578,6 +538,23 @@ export function FilesPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {!viewTrash && openFolder && (
+          <div className="mb-4 flex items-center gap-2.5 rounded-2xl border border-indigo-200 bg-indigo-50/70 px-4 py-2.5">
+            <div className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-xl', tone(openFolder.tone).soft)}>
+              <FolderGlyph name={openFolder.icon} className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold text-slate-900">{openFolder.name}</p>
+              <p className="text-xs text-slate-500">
+                {t('files.folderMeta', { count: openFolder.fileCount, size: formatBytes(openFolder.size) })}
+              </p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setOpenFolder(null)}>
+              {t('files.allFiles')}
+            </Button>
+          </div>
+        )}
 
         <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           {/* Filter chips */}

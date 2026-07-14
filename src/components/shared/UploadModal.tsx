@@ -24,8 +24,9 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
   const [manual, setManual] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Thư mục thật từ backend.
-  const { data: foldersData } = useAsync(() => api.folders() as Promise<Folder[]>, [])
+  // Thư mục thật từ backend — refetch mỗi khi mở modal để không dùng danh sách cũ
+  // (folder vừa tạo trong phiên vẫn hiện ra ở chế độ "Chọn thủ công").
+  const { data: foldersData } = useAsync(() => api.folders() as Promise<Folder[]>, [open])
   const folders = useMemo<Folder[]>(() => foldersData ?? [], [foldersData])
 
   // Gợi ý nơi lưu: lấy các thư mục nhiều file nhất làm ứng viên.
