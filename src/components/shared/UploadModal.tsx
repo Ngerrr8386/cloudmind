@@ -21,6 +21,7 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
   const [pendingFiles, setPendingFiles] = useState<File[]>([])
   const [uploaded, setUploaded] = useState(0)
   const [failed, setFailed] = useState(0)
+  const [manual, setManual] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Thư mục thật từ backend.
@@ -54,6 +55,7 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
         setPendingFiles([])
         setUploaded(0)
         setFailed(0)
+        setManual(false)
         setPicked(folderSuggestions[0]?.folderId ?? '')
       }, 300)
       return () => clearTimeout(t)
@@ -207,53 +209,97 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
         {/* SUGGEST */}
         {stage === 'suggest' && (
           <motion.div key="suggest" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-600">
-              <Sparkles className="h-4 w-4" />
-              {t('upload.suggestTitle')}
-            </div>
-            <div className="space-y-2.5">
-              {folderSuggestions.map((s, i) => {
-                const folder = folders.find((f) => f.id === s.folderId)
-                const active = picked === s.folderId
-                return (
-                  <motion.button
-                    key={s.folderId}
-                    initial={{ opacity: 0, x: -12 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.08 }}
-                    onClick={() => setPicked(s.folderId)}
-                    className={cn(
-                      'flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-colors',
-                      active ? 'border-ink-300 bg-ink-50' : 'border-slate-200 bg-white hover:bg-slate-50',
-                    )}
-                  >
-                    <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', toneClasses(folder?.tone ?? 'indigo').soft)}>
-                      <FolderGlyph name={folder?.icon ?? 'Folder'} className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate font-semibold text-slate-800">{s.folderName}</p>
-                        {i === 0 && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">{t('upload.bestMatch')}</span>}
-                      </div>
-                      <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">{s.reason}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <ConfidenceMeter value={s.confidence} />
-                      <span className={cn('grid h-5 w-5 place-items-center rounded-full border', active ? 'border-ink-600 bg-ink-600 text-white' : 'border-slate-300')}>
-                        {active && <Check className="h-3 w-3" />}
-                      </span>
-                    </div>
-                  </motion.button>
-                )
-              })}
-            </div>
-            <div className="mt-5 flex gap-2">
-              <Button variant="glass" className="flex-1" onClick={onClose}>{t('upload.manual')}</Button>
-              <Button className="flex-1" onClick={confirmUpload}>
-                <FolderInput className="h-4 w-4" />
-                {t('upload.saveHere')}
-              </Button>
-            </div>
+            {!manual ? (
+              <>
+                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-600">
+                  <Sparkles className="h-4 w-4" />
+                  {t('upload.suggestTitle')}
+                </div>
+                <div className="space-y-2.5">
+                  {folderSuggestions.length === 0 && (
+                    <p className="rounded-2xl bg-slate-50 px-4 py-4 text-center text-sm text-slate-400">
+                      {t('upload.noFolders')}
+                    </p>
+                  )}
+                  {folderSuggestions.map((s, i) => {
+                    const folder = folders.find((f) => f.id === s.folderId)
+                    const active = picked === s.folderId
+                    return (
+                      <motion.button
+                        key={s.folderId}
+                        initial={{ opacity: 0, x: -12 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.08 }}
+                        onClick={() => setPicked(s.folderId)}
+                        className={cn(
+                          'flex w-full items-center gap-3 rounded-2xl border p-3 text-left transition-colors',
+                          active ? 'border-ink-300 bg-ink-50' : 'border-slate-200 bg-white hover:bg-slate-50',
+                        )}
+                      >
+                        <div className={cn('grid h-11 w-11 shrink-0 place-items-center rounded-xl', toneClasses(folder?.tone ?? 'indigo').soft)}>
+                          <FolderGlyph name={folder?.icon ?? 'Folder'} className="h-5 w-5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate font-semibold text-slate-800">{s.folderName}</p>
+                            {i === 0 && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-600">{t('upload.bestMatch')}</span>}
+                          </div>
+                          <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">{s.reason}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <ConfidenceMeter value={s.confidence} />
+                          <span className={cn('grid h-5 w-5 place-items-center rounded-full border', active ? 'border-ink-600 bg-ink-600 text-white' : 'border-slate-300')}>
+                            {active && <Check className="h-3 w-3" />}
+                          </span>
+                        </div>
+                      </motion.button>
+                    )
+                  })}
+                </div>
+                <div className="mt-5 flex gap-2">
+                  <Button variant="glass" className="flex-1" onClick={() => setManual(true)}>{t('upload.manual')}</Button>
+                  <Button className="flex-1" onClick={confirmUpload}>
+                    <FolderInput className="h-4 w-4" />
+                    {t('upload.saveHere')}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink-600">
+                  <FolderInput className="h-4 w-4" />
+                  {t('upload.manualTitle')}
+                </div>
+                <div className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+                  {/* Lưu vào gốc (không thư mục) */}
+                  <FolderPick
+                    active={picked === ''}
+                    onClick={() => setPicked('')}
+                    icon="Folder"
+                    toneKey="slate"
+                    name={t('upload.rootFolder')}
+                  />
+                  {folders.map((f) => (
+                    <FolderPick
+                      key={f.id}
+                      active={picked === f.id}
+                      onClick={() => setPicked(f.id)}
+                      icon={f.icon}
+                      toneKey={f.tone}
+                      name={f.name}
+                      meta={t('files.folderMeta', { count: f.fileCount, size: formatBytes(f.size) })}
+                    />
+                  ))}
+                </div>
+                <div className="mt-5 flex gap-2">
+                  <Button variant="glass" className="flex-1" onClick={() => setManual(false)}>{t('upload.back')}</Button>
+                  <Button className="flex-1" onClick={confirmUpload}>
+                    <FolderInput className="h-4 w-4" />
+                    {t('upload.saveHere')}
+                  </Button>
+                </div>
+              </>
+            )}
           </motion.div>
         )}
 
@@ -310,5 +356,44 @@ export function UploadModal({ open, onClose, onUploaded }: { open: boolean; onCl
         )}
       </AnimatePresence>
     </Modal>
+  )
+}
+
+/** Một dòng thư mục chọn được trong chế độ "Chọn thủ công". */
+function FolderPick({
+  active,
+  onClick,
+  icon,
+  toneKey,
+  name,
+  meta,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: string
+  toneKey: string
+  name: string
+  meta?: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition-colors',
+        active ? 'border-ink-300 bg-ink-50' : 'border-slate-200 bg-white hover:bg-slate-50',
+      )}
+    >
+      <div className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', toneClasses(toneKey).soft)}>
+        <FolderGlyph name={icon} className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-slate-800">{name}</p>
+        {meta && <p className="truncate text-xs text-slate-400">{meta}</p>}
+      </div>
+      <span className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-full border', active ? 'border-ink-600 bg-ink-600 text-white' : 'border-slate-300')}>
+        {active && <Check className="h-3 w-3" />}
+      </span>
+    </button>
   )
 }
